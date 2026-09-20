@@ -89,6 +89,19 @@ export function registerProjetosRoutes(app: FastifyInstance, pool: Pool): void {
     return reply.send(project);
   });
 
+  // Diretório de usuários para seleção de membros/atribuídos (id, nome, e-mail).
+  // Gated por gerenciar membros, já que expõe a lista de colaboradores.
+  app.get("/api/projetos/users", async (request, reply) => {
+    const users = await withTransaction(pool, async (c) => {
+      await authorize(c, request.userId, "projetos:membros:gerenciar");
+      const { rows } = await c.query<{ id: string; full_name: string | null; email: string }>(
+        `SELECT id, full_name, email FROM core.users WHERE status = 'active' ORDER BY full_name`,
+      );
+      return rows;
+    });
+    return reply.send(users);
+  });
+
   // --- Membros ---
   app.get<{ Params: { id: string } }>("/api/projetos/:id/members", async (request, reply) => {
     const members = await withTransaction(pool, async (c) => {

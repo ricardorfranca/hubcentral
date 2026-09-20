@@ -42,11 +42,11 @@ Plano incremental. Cada tarefa referencia os requisitos que atende. Backend com 
 
 ## Fase 6 — Frontend: telas do módulo Projetos
 
-- [ ] 6.1 `core/api/projetos.ts` (funções tipadas) + `modules/projetos/hooks.ts` (queries/mutations com invalidação). _Req 1–7, 12_
-- [ ] 6.2 `ProjectsPage.tsx` (lista dos projetos do usuário + criar) e `module.tsx` (`ModuleDefinition`, registrado em `MODULE_REGISTRY`). _Req 1, 11_
-- [ ] 6.3 `ProjectDetailPage.tsx` (dados, descritivo principal, membros, comentários do projeto) + `ProjectBoard.tsx` (Kanban 3 colunas, DnD com `projetos:tarefa:mover`). _Req 2, 3, 4, 12_
-- [ ] 6.4 `TaskDetailPage.tsx`/dialog: atribuídos, comentários, anexos (upload/lista/download/excluir). _Req 5, 6, 7_
-- [ ] 6.5 Typecheck + testes + build do frontend.
+- [x] 6.1 `core/api/projetos.ts` (funções tipadas) + `modules/projetos/hooks.ts` (queries/mutations com invalidação). _Req 1–7, 12_
+- [x] 6.2 `ProjectsPage.tsx` (lista dos projetos do usuário + criar) e `module.tsx` (`ModuleDefinition`, registrado em `MODULE_REGISTRY`). _Req 1, 11_
+- [x] 6.3 `ProjectDetailPage.tsx` (dados, descritivo principal, membros, comentários do projeto) + `ProjectBoard.tsx` (Kanban 3 colunas, DnD com `projetos:tarefa:mover`). _Req 2, 3, 4, 12_
+- [x] 6.4 `TaskDetailDialog.tsx`: atribuídos, comentários, anexos (upload/lista/download/excluir). _Req 5, 6, 7_
+- [x] 6.5 Typecheck + testes + build do frontend.
 
 ## Fase 7 — Instalador, documentação e release
 
