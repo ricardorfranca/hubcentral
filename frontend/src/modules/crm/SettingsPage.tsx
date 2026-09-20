@@ -12,7 +12,7 @@ import {
   Box, Typography, Card, CardContent, Grid2 as Grid, Stack, TextField, Button, Chip,
   Select, MenuItem, FormControl, InputLabel,
 } from "@mui/material";
-import { addCrmItem, listCrmItems, getSla, setSla, type CrmListType } from "../../core/api/crm-extra.js";
+import { addCrmItem, listCrmItems, removeCrmItem, getSla, setSla, type CrmListType } from "../../core/api/crm-extra.js";
 import { useStages } from "./sales-hooks.js";
 import type { SlaConfig } from "../../core/api/types.js";
 
@@ -36,13 +36,19 @@ function ListEditor({ type, label }: { type: CrmListType; label: string }): JSX.
       setValue("");
     },
   });
+  const remove = useMutation({
+    mutationFn: (id: string) => removeCrmItem(type, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm", "list", type] }),
+  });
 
   return (
     <Card variant="outlined">
       <CardContent>
         <Typography variant="subtitle1" fontWeight={600} gutterBottom>{label}</Typography>
         <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", gap: 0.5, mb: 1 }}>
-          {(items ?? []).map((i) => <Chip key={i.id} label={i.value} size="small" />)}
+          {(items ?? []).map((i) => (
+            <Chip key={i.id} label={i.value} size="small" onDelete={() => remove.mutate(i.id)} />
+          ))}
           {(items ?? []).length === 0 && <Typography variant="body2" color="text.secondary">Vazio</Typography>}
         </Stack>
         <Stack direction="row" spacing={1}>

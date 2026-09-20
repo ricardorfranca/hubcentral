@@ -15,7 +15,9 @@ import {
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import AccountCircle from "@mui/icons-material/AccountCircle";
-import { ListSubheader } from "@mui/material";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import { ListSubheader, Box as MuiBox, Tooltip } from "@mui/material";
 import { MODULE_REGISTRY } from "../core/modules/registry.js";
 import { useCan } from "../core/rbac/can.js";
 import { useBrandingStore } from "../core/branding/branding-store.js";
@@ -36,6 +38,9 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
   const location = useLocation();
   const can = useCan();
   const systemName = useBrandingStore((s) => s.systemName);
+  const logoUrl = useBrandingStore((s) => s.logoUrl);
+  const mode = useBrandingStore((s) => s.mode);
+  const toggleMode = useBrandingStore((s) => s.toggleMode);
   const user = useSessionStore((s) => s.user);
   const clear = useSessionStore((s) => s.clear);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -110,9 +115,22 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap sx={{ flexGrow: 1 }}>
-            {systemName}
-          </Typography>
+          <MuiBox sx={{ display: "flex", alignItems: "center", gap: 1, flexGrow: 1 }}>
+            {logoUrl && (
+              <MuiBox
+                component="img"
+                src={logoUrl}
+                alt={systemName}
+                sx={{ height: 32, width: "auto", maxWidth: 160, objectFit: "contain" }}
+              />
+            )}
+            <Typography variant="h6" noWrap>{systemName}</Typography>
+          </MuiBox>
+          <Tooltip title={mode === "dark" ? "Modo claro" : "Modo escuro"}>
+            <IconButton color="inherit" onClick={toggleMode} aria-label="alternar tema">
+              {mode === "dark" ? <LightModeIcon /> : <DarkModeIcon />}
+            </IconButton>
+          </Tooltip>
           <NotificationBell />
           <IconButton color="inherit" onClick={(e) => setAnchor(e.currentTarget)} aria-label="conta">
             <AccountCircle />

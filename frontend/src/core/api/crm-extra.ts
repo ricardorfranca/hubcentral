@@ -24,6 +24,9 @@ export function listCrmItems(type: CrmListType): Promise<ListItem[]> {
 export function addCrmItem(type: CrmListType, value: string): Promise<ListItem> {
   return request<ListItem>(`/api/crm/lists/${type}`, { method: "POST", body: { value } });
 }
+export function removeCrmItem(type: CrmListType, id: string): Promise<void> {
+  return request<void>(`/api/crm/lists/${type}/${id}`, { method: "DELETE" });
+}
 
 // --- SLA ---
 export function getSla(columnId: string): Promise<SlaConfig> {

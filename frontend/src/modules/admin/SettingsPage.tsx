@@ -14,6 +14,8 @@ import {
   CircularProgress, Divider,
 } from "@mui/material";
 import { listSettings, updateSetting, type Setting } from "../../core/api/settings.js";
+import { uploadLogo } from "../../core/api/branding.js";
+import { useBrandingStore } from "../../core/branding/branding-store.js";
 
 /** Rótulos amigáveis por módulo. */
 const MODULE_LABELS: Record<string, string> = {
@@ -65,10 +67,24 @@ export function SettingsPage(): JSX.Element {
   );
 }
 
+/** Converte bytes para MB (string com até 2 casas). */
+function bytesToMb(bytes: string): string {
+  const n = Number(bytes);
+  return Number.isFinite(n) ? String(Math.round((n / (1024 * 1024)) * 100) / 100) : bytes;
+}
+/** Converte MB (string) para bytes inteiros. */
+function mbToBytes(mb: string): string {
+  const n = Number(mb);
+  return Number.isFinite(n) ? String(Math.round(n * 1024 * 1024)) : mb;
+}
+
 /** Editor de um único parâmetro, conforme o tipo. */
 function SettingEditor({ setting }: { setting: Setting }): JSX.Element {
   const qc = useQueryClient();
-  const effective = setting.value ?? setting.default_value ?? "";
+  // Parâmetros de tamanho em bytes são exibidos/editados em MB.
+  const isBytes = setting.value_type === "int" && setting.key.endsWith("_bytes");
+  const rawEffective = setting.value ?? setting.default_value ?? "";
+  const effective = isBytes ? bytesToMb(rawEffective) : rawEffective;
   const [value, setValue] = useState<string>(effective);
 
   const save = useMutation({
@@ -77,11 +93,28 @@ function SettingEditor({ setting }: { setting: Setting }): JSX.Element {
   });
 
   const isBool = setting.value_type === "bool";
+  const isColor = setting.key.endsWith("_color");
+  const isLogo = setting.key === "core.branding.logo_url";
   const dirty = value !== effective;
+  const setBranding = useBrandingStore((s) => s.setBranding);
+  const persist = (v: string): void => {
+    save.mutate(isBytes ? mbToBytes(v) : v);
+    // Reflete branding imediatamente no tema.
+    if (setting.key === "core.branding.primary_color") setBranding({ primaryColor: v });
+    if (setting.key === "core.branding.secondary_color") setBranding({ secondaryColor: v });
+    if (setting.key === "core.branding.system_name") setBranding({ systemName: v });
+    if (isLogo) setBranding({ logoUrl: v || null });
+  };
+
+  async function onLogoFile(file: File): Promise<void> {
+    const { logo_url } = await uploadLogo(file);
+    setValue(logo_url);
+    setBranding({ logoUrl: logo_url });
+  }
 
   return (
     <Box>
-      <Typography variant="subtitle2">{setting.label}</Typography>
+      <Typography variant="subtitle2">{setting.label}{isBytes ? " (MB)" : ""}</Typography>
       {setting.description && (
         <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
           {setting.description}
@@ -102,6 +135,18 @@ function SettingEditor({ setting }: { setting: Setting }): JSX.Element {
             }
             label={value === "true" ? "Ativado" : "Desativado"}
           />
+        ) : isColor ? (
+          <>
+            <input
+              type="color"
+              value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#000000"}
+              onChange={(e) => setValue(e.target.value)}
+              style={{ width: 48, height: 36, border: "none", background: "none", cursor: "pointer" }}
+              aria-label={setting.label}
+            />
+            <TextField size="small" sx={{ width: 140 }} value={value} onChange={(e) => setValue(e.target.value)} />
+            <Button variant="outlined" disabled={!dirty || save.isPending} onClick={() => persist(value)}>Salvar</Button>
+          </>
         ) : (
           <>
             <TextField
@@ -110,12 +155,18 @@ function SettingEditor({ setting }: { setting: Setting }): JSX.Element {
               type={setting.value_type === "int" ? "number" : "text"}
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              helperText={setting.value_type === "csv" ? "Separe os valores por vírgula." : undefined}
+              helperText={setting.value_type === "csv" ? "Separe os valores por vírgula." : (isLogo ? "URL do logotipo, ou envie um arquivo." : undefined)}
             />
+            {isLogo && (
+              <Button variant="outlined" component="label">
+                Enviar
+                <input type="file" hidden accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onLogoFile(f); e.target.value = ""; }} />
+              </Button>
+            )}
             <Button
               variant="outlined"
               disabled={!dirty || save.isPending}
-              onClick={() => save.mutate(value)}
+              onClick={() => persist(value)}
             >
               Salvar
             </Button>

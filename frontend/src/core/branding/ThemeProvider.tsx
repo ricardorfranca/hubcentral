@@ -19,17 +19,19 @@ import { useBrandingStore } from "./branding-store.js";
 export function ThemeProvider({ children }: { children: ReactNode }): JSX.Element {
   const primary = useBrandingStore((s) => s.primaryColor);
   const secondary = useBrandingStore((s) => s.secondaryColor);
+  const mode = useBrandingStore((s) => s.mode);
 
   const theme = useMemo(
     () =>
       createTheme({
         palette: {
+          mode,
           primary: { main: primary },
           secondary: { main: secondary },
         },
         shape: { borderRadius: 8 },
       }),
-    [primary, secondary],
+    [primary, secondary, mode],
   );
 
   return (

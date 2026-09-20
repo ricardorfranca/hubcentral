@@ -52,3 +52,8 @@ export function getUserPermissions(id: string): Promise<string[]> {
 export function setUserPermissions(id: string, permissions: string[]): Promise<void> {
   return request<void>(`/api/iam/users/${id}/permissions`, { method: "PUT", body: { permissions } });
 }
+
+/** Define/atribui a senha de um usuário (admin). */
+export function setUserPassword(id: string, password: string): Promise<void> {
+  return request<void>(`/api/iam/users/${id}/password`, { method: "POST", body: { password } });
+}

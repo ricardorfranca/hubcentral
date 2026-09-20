@@ -10,7 +10,7 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { withTransaction } from "../../core/db/pool.js";
 import {
-  listUsers, inviteUser, resendInvite, setUserRole, setUserStatus, getUserById,
+  listUsers, inviteUser, resendInvite, setUserRole, setUserStatus, getUserById, setPassword,
   type UserRole,
 } from "../../core/iam/identity-service.js";
 import { authorize, listUserPermissions, setUserPermissions } from "../../core/iam/rbac.js";
@@ -76,6 +76,18 @@ export function registerUserRoutes(app: FastifyInstance, pool: Pool): void {
         return reply.status(404).send({ code: "IAM_USER_NOT_FOUND", message: "Usuário não encontrado.", details: {} });
       }
       return reply.send(updated);
+    },
+  );
+
+  // Definir/atribuir a senha de um usuário diretamente (admin).
+  app.post<{ Params: { id: string }; Body: { password: string } }>(
+    "/api/iam/users/:id/password",
+    async (request, reply) => {
+      await withTransaction(pool, async (c) => {
+        await authorize(c, request.userId, ADMIN_NS);
+        await setPassword(c, request.params.id, request.body.password);
+      });
+      return reply.status(204).send();
     },
   );
 

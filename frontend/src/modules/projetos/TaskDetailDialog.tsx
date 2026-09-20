@@ -116,7 +116,7 @@ export function TaskDetailDialog({ taskId, members, onClose }: Props): JSX.Eleme
                       </Stack>
                     }
                   >
-                    <ListItemText primary={a.original_name} secondary={`${(a.size_bytes / 1024).toFixed(1)} KB`} />
+                    <ListItemText primary={a.original_name} secondary={`${(a.size_bytes / (1024 * 1024)).toFixed(2)} MB`} />
                   </ListItem>
                 ))}
                 {task.attachments.length === 0 && <Typography variant="caption" color="text.secondary">Sem anexos.</Typography>}

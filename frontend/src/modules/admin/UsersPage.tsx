@@ -16,7 +16,8 @@ import {
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import SecurityIcon from "@mui/icons-material/Security";
 import ReplayIcon from "@mui/icons-material/Replay";
-import { listUsers, inviteUser, updateUser, resendInvite, type AdminUser } from "../../core/api/iam.js";
+import KeyIcon from "@mui/icons-material/Key";
+import { listUsers, inviteUser, updateUser, resendInvite, setUserPassword, type AdminUser } from "../../core/api/iam.js";
 import { ApiError } from "../../core/api/client.js";
 import type { UserRole } from "../../core/api/types.js";
 import { PermissionsDialog } from "./PermissionsDialog.js";
@@ -33,6 +34,7 @@ export function UsersPage(): JSX.Element {
   const { data: users, isLoading } = useQuery({ queryKey: ["iam", "users"], queryFn: listUsers });
   const [inviteOpen, setInviteOpen] = useState(false);
   const [permUser, setPermUser] = useState<AdminUser | null>(null);
+  const [pwdUser, setPwdUser] = useState<AdminUser | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["iam", "users"] });
@@ -99,6 +101,9 @@ export function UsersPage(): JSX.Element {
                     <IconButton size="small" onClick={() => resend.mutate(u.id)}><ReplayIcon fontSize="small" /></IconButton>
                   </Tooltip>
                 )}
+                <Tooltip title="Definir senha">
+                  <IconButton size="small" onClick={() => setPwdUser(u)}><KeyIcon fontSize="small" /></IconButton>
+                </Tooltip>
                 <Tooltip title="Permissões">
                   <IconButton size="small" onClick={() => setPermUser(u)}><SecurityIcon fontSize="small" /></IconButton>
                 </Tooltip>
@@ -110,7 +115,48 @@ export function UsersPage(): JSX.Element {
 
       <InviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} onDone={invalidate} onError={setError} />
       {permUser && <PermissionsDialog user={permUser} onClose={() => setPermUser(null)} />}
+      {pwdUser && <PasswordDialog user={pwdUser} onClose={() => setPwdUser(null)} onError={setError} />}
     </Box>
+  );
+}
+
+/** Diálogo para o admin definir a senha de um usuário. */
+function PasswordDialog({
+  user, onClose, onError,
+}: {
+  user: AdminUser; onClose: () => void; onError: (m: string) => void;
+}): JSX.Element {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: () => setUserPassword(user.id, password),
+    onSuccess: onClose,
+    onError: (e) => onError(e instanceof ApiError ? e.message : "Falha ao definir senha."),
+  });
+
+  function submit(): void {
+    setLocalError(null);
+    if (password.length < 8) { setLocalError("A senha deve ter ao menos 8 caracteres."); return; }
+    if (password !== confirm) { setLocalError("As senhas não conferem."); return; }
+    save.mutate();
+  }
+
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="xs">
+      <DialogTitle>Definir senha — {user.full_name}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          {localError && <Alert severity="error">{localError}</Alert>}
+          <TextField label="Nova senha" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
+          <TextField label="Confirmar senha" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancelar</Button>
+        <Button variant="contained" onClick={submit} disabled={save.isPending}>Salvar</Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 

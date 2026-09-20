@@ -9,7 +9,7 @@
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { withTransaction } from "../../core/db/pool.js";
-import { addListItem, listItems, type ListType } from "../../modules/crm/list-service.js";
+import { addListItem, listItems, deactivateListItem, type ListType } from "../../modules/crm/list-service.js";
 import { setSlaConfig, getSlaConfig, type SlaUnit } from "../../modules/crm/sla-service.js";
 import { getTimeline } from "../../modules/crm/timeline-service.js";
 import { sendMessage, listMessages, listConversations, markRead } from "../../modules/crm/message-service.js";
@@ -36,6 +36,16 @@ export function registerCrmExtraRoutes(app: FastifyInstance, pool: Pool): void {
     async (request, reply) => {
       const item = await withTransaction(pool, (c) => addListItem(c, request.params.type, request.body.value));
       return reply.status(201).send(item);
+    },
+  );
+  app.delete<{ Params: { type: ListType; id: string } }>(
+    "/api/crm/lists/:type/:id",
+    async (request, reply) => {
+      const removed = await withTransaction(pool, (c) => deactivateListItem(c, request.params.id));
+      if (!removed) {
+        return reply.status(404).send({ code: "CRM_LIST_ITEM_NOT_FOUND", message: "Item não encontrado.", details: {} });
+      }
+      return reply.status(204).send();
     },
   );
 
