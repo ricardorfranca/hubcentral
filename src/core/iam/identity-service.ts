@@ -34,6 +34,21 @@ export interface IamUser {
 const USER_COLUMNS = "id, email, full_name, role, status, password_set";
 
 /**
+ * Busca um usuário por id (dados seguros, sem hash).
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param userId - `user_id`.
+ * @returns O usuário, ou `null` se não existe.
+ */
+export async function getUserById(client: PoolClient, userId: string): Promise<IamUser | null> {
+  const { rows } = await client.query<IamUser>(
+    `SELECT ${USER_COLUMNS} FROM core.users WHERE id = $1`,
+    [userId],
+  );
+  return rows[0] ?? null;
+}
+
+/**
  * Provisiona (convida) um novo usuário com senha temporária e `password_set`
  * false, exigindo definição de nova senha no primeiro acesso (§5.6).
  *

@@ -187,6 +187,7 @@ curl -sSL https://raw.githubusercontent.com/ricardorfranca/hubcentral/main/scrip
 4. Gera um `.env` inicial (na primeira vez) ou preserva o existente.
 5. Roda `npm ci`, `npm run build` e aplica as migrations.
 6. Instala e (re)inicia um serviço **systemd** (`hubcentral.service`) com restart automático.
+7. Compila o **frontend** e instala/configura o **nginx** para servir o portal web (porta 80) com reverse proxy de `/api`.
 
 ### Banco de dados
 
@@ -218,6 +219,22 @@ journalctl -u hubcentral -f      # logs em tempo real
 systemctl restart hubcentral     # reiniciar
 ```
 
+
+## Frontend
+
+O portal web é uma SPA em **React + TypeScript + Vite + Material UI**, em `frontend/`. É uma base consolidada e extensível: cada módulo registra suas telas, menus e permissões de forma declarativa (`ModuleDefinition`), do mesmo modo que o backend usa o Contrato de Módulos. Inclui autenticação (login e primeiro acesso), tema white-label e o módulo CRM (pipeline Kanban).
+
+```bash
+cd frontend
+npm install
+npm run dev      # dev server (proxy /api -> http://127.0.0.1:3000)
+npm run build    # gera frontend/dist (servido pelo nginx em produção)
+npm test         # testes (Vitest + Testing Library)
+```
+
+Estrutura: `src/core` (api, auth, branding, rbac, registro de módulos) e `src/modules/<modulo>` (telas de cada módulo). Adicionar um módulo = criar seu `ModuleDefinition` e registrá-lo em `src/core/modules/registry.ts` — o Shell não muda.
+
+O portal é servido em produção pelo **nginx** (config em `deploy/nginx/hubcentral.conf`), que entrega a SPA e faz reverse proxy de `/api` para o backend. O `install.sh` compila o frontend e configura o nginx automaticamente.
 
 ## Módulos
 

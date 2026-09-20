@@ -253,6 +253,52 @@ EOF
   log "Serviço '$SERVICE_NAME' (re)iniciado."
 }
 
+# ----- Frontend + nginx -----
+
+# Compila o frontend (SPA) em frontend/dist.
+build_frontend() {
+  if [ ! -d "$INSTALL_DIR/frontend" ]; then
+    warn "Diretório frontend/ ausente; pulando build do frontend."
+    return
+  fi
+  log "Instalando dependências e compilando o frontend..."
+  ( cd "$INSTALL_DIR/frontend" && npm ci --no-audit --no-fund && npm run build )
+}
+
+# Instala e configura o nginx para servir a SPA e fazer proxy de /api.
+install_nginx() {
+  if [ ! -d "$INSTALL_DIR/frontend/dist" ]; then
+    warn "frontend/dist ausente; nginx não será configurado."
+    return
+  fi
+  log "Instalando e configurando nginx..."
+  case "$PKG" in
+    apt) apt-get install -y -qq nginx ;;
+    dnf) dnf install -y -q nginx ;;
+    yum) yum install -y -q nginx ;;
+  esac
+
+  local conf_src="$INSTALL_DIR/deploy/nginx/hubcentral.conf"
+  if [ -d /etc/nginx/sites-available ]; then
+    # Debian/Ubuntu: sites-available + symlink em sites-enabled.
+    cp "$conf_src" /etc/nginx/sites-available/hubcentral
+    ln -sf /etc/nginx/sites-available/hubcentral /etc/nginx/sites-enabled/hubcentral
+    rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+  else
+    # RHEL/derivados: conf.d.
+    cp "$conf_src" /etc/nginx/conf.d/hubcentral.conf
+  fi
+
+  # Valida a config antes de recarregar; não derruba o serviço se falhar.
+  if nginx -t 2>/dev/null; then
+    systemctl enable --now nginx >/dev/null 2>&1 || systemctl restart nginx || true
+    systemctl reload nginx 2>/dev/null || systemctl restart nginx || true
+    log "nginx configurado e recarregado."
+  else
+    err "Configuração do nginx inválida; verifique com 'nginx -t'."
+  fi
+}
+
 # ----- Fluxo principal -----
 
 main() {
@@ -272,14 +318,19 @@ main() {
   fetch_code
   ensure_env
   build_app
+  build_frontend
   run_migrations
   set_ownership
   install_service
+  install_nginx
 
   log "Concluído. HUB Central instalado/atualizado em $INSTALL_DIR."
   if command -v systemctl >/dev/null 2>&1; then
     log "Status:   systemctl status ${SERVICE_NAME}"
     log "Logs:     journalctl -u ${SERVICE_NAME} -f"
+  fi
+  if [ -d "$INSTALL_DIR/frontend/dist" ]; then
+    log "Portal web disponível via nginx (porta 80). Configure o domínio e TLS conforme o README."
   fi
 }
 

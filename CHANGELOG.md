@@ -2,6 +2,15 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.2.0] - 2026-09-19
+
+### Adicionado
+
+- **Portal web (frontend)**: SPA em React + TypeScript + Vite + Material UI, em `frontend/`. Base extensível com registro declarativo de módulos (`ModuleDefinition`), autenticação (login e primeiro acesso via IAM), tema white-label e cliente de API tipado (TanStack Query + Zustand).
+- **Módulo CRM no frontend**: pipeline Kanban com drag-and-drop (respeitando `crm:pipeline:mover`), criação de lead e painel de detalhe com dados de contato da Base Central e timeline.
+- **Endpoint `/api/auth/me`** e inclusão das permissões RBAC na resposta de login, para o controle de acesso do frontend.
+- **Entrega via nginx**: configuração em `deploy/nginx/hubcentral.conf` (SPA + reverse proxy `/api`, TLS-ready) e integração no `install.sh` (compila o frontend e configura o nginx).
+
 ## [0.1.1] - 2026-09-19
 
 ### Adicionado

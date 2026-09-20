@@ -30,6 +30,24 @@ export async function grantNamespace(
 }
 
 /**
+ * Lista todos os namespaces RBAC concedidos a um usuário.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param userId - `user_id` do usuário.
+ * @returns Lista de namespaces (possivelmente vazia).
+ */
+export async function listUserPermissions(
+  client: PoolClient,
+  userId: string,
+): Promise<string[]> {
+  const { rows } = await client.query<{ namespace: string }>(
+    `SELECT namespace FROM core.user_permissions WHERE user_id = $1 ORDER BY namespace`,
+    [userId],
+  );
+  return rows.map((r) => r.namespace);
+}
+
+/**
  * Indica se um usuário possui um namespace RBAC (Req 10.3).
  *
  * @param client - Cliente PostgreSQL.
