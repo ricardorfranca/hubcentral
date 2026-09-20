@@ -12,13 +12,13 @@ Plano incremental. Cada tarefa referencia os requisitos que atende. Backend com 
 
 ## Fase 2 — Módulo Projetos: schema e serviços base
 
-- [ ] 2.1 Migration `projetos-schema`: `CREATE SCHEMA mod_projetos`; tabelas `projects` (com `detail`), `project_members`; índices. `.up`/`.down`. _Req 1, 2_
-- [ ] 2.2 Migration `projetos-tasks`: `tasks` (status enum via CHECK, `position`), `task_assignees`; índices `(project_id, status, position)`, `(user_id)`. `.up`/`.down`. _Req 3, 5_
-- [ ] 2.3 Migration `projetos-comments-attachments`: `project_comments`, `task_comments`, `task_attachments`; seed das chaves `projetos.uploads.*` em `core.settings` via `registerSetting`. `.up`/`.down`. _Req 6, 7, 12, 13_
-- [ ] 2.4 Namespaces `PROJETOS_NAMESPACES` (lista do design) em `namespaces.ts` + `ALL_NAMESPACES`. _Req 9_
-- [ ] 2.5 Códigos de erro em `errors.ts`: `PROJ_ACCESS_DENIED`, `PROJ_NOT_FOUND`, `PROJ_TASK_NOT_FOUND`, `PROJ_ARCHIVED`, `PROJ_ATTACHMENT_INVALID`, `PROJ_ATTACHMENT_NOT_FOUND`. Mapear no `error-mapping.ts` (status HTTP). _Req 9_
-- [ ] 2.6 `project-service.ts`: create/update/archive, `listProjectsForUser`, `getProject`, `assertProjectAccess`; auditoria. Testes: criação adiciona dono como membro; arquivamento bloqueia criação/movimentação; acesso negado a não-participante. _Req 1, 2_
-- [ ] 2.7 `member-service.ts`: add/remove/list; remover membro remove atribuições. Auditoria. Testes. _Req 2_
+- [x] 2.1 Migration `projetos-schema`: `CREATE SCHEMA mod_projetos`; tabelas `projects` (com `detail`), `project_members`; índices. `.up`/`.down`. _Req 1, 2_
+- [x] 2.2 Migration `projetos-tasks`: `tasks` (status enum via CHECK, `position`), `task_assignees`; índices `(project_id, status, position)`, `(user_id)`. `.up`/`.down`. _Req 3, 5_
+- [x] 2.3 Migration `projetos-comments-attachments`: `project_comments`, `task_comments`, `task_attachments`; seed das chaves `projetos.uploads.*` em `core.settings` via `registerSetting`. `.up`/`.down`. _Req 6, 7, 12, 13_
+- [x] 2.4 Namespaces `PROJETOS_NAMESPACES` (lista do design) em `namespaces.ts` + `ALL_NAMESPACES`. _Req 9_
+- [x] 2.5 Códigos de erro em `errors.ts`: `PROJ_ACCESS_DENIED`, `PROJ_NOT_FOUND`, `PROJ_TASK_NOT_FOUND`, `PROJ_ARCHIVED`, `PROJ_ATTACHMENT_INVALID`, `PROJ_ATTACHMENT_NOT_FOUND`. Mapear no `error-mapping.ts` (status HTTP). _Req 9_
+- [x] 2.6 `project-service.ts`: create/update/archive, `listProjectsForUser`, `getProject`, `assertProjectAccess`; auditoria. Testes: criação adiciona dono como membro; arquivamento bloqueia criação/movimentação; acesso negado a não-participante. _Req 1, 2_
+- [x] 2.7 `member-service.ts`: add/remove/list; remover membro remove atribuições. Auditoria. Testes. _Req 2_
 
 ## Fase 3 — Módulo Projetos: tarefas, atribuição, comentários, eventos
 

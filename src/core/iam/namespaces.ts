@@ -69,5 +69,28 @@ export const CRM_NAMESPACES: readonly string[] = [
   "crm:forecast:visualizar",
 ];
 
+/** Namespaces do Módulo de Projetos Internos. */
+export const PROJETOS_NAMESPACES: readonly string[] = [
+  "projetos:projeto:visualizar",
+  "projetos:projeto:criar",
+  "projetos:projeto:editar",
+  "projetos:projeto:arquivar",
+  "projetos:membros:gerenciar",
+  "projetos:tarefa:visualizar",
+  "projetos:tarefa:criar",
+  "projetos:tarefa:editar",
+  "projetos:tarefa:mover",
+  "projetos:tarefa:atribuir",
+  "projetos:comentario:criar",
+  "projetos:anexo:enviar",
+  "projetos:anexo:baixar",
+  "projetos:anexo:excluir",
+  "projetos:notificacoes:visualizar",
+];
+
 /** Todos os namespaces conhecidos (núcleo + módulos). */
-export const ALL_NAMESPACES: readonly string[] = [...CORE_NAMESPACES, ...CRM_NAMESPACES];
+export const ALL_NAMESPACES: readonly string[] = [
+  ...CORE_NAMESPACES,
+  ...CRM_NAMESPACES,
+  ...PROJETOS_NAMESPACES,
+];
