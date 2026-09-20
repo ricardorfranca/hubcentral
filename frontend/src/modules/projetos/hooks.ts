@@ -2,17 +2,18 @@
  * @file hooks.ts
  * @module modules/projetos
  *
- * Hooks TanStack Query do Módulo de Projetos: projetos, membros, tarefas,
- * atribuições, comentários e anexos, com invalidação de cache.
+ * Hooks TanStack Query do Módulo de Projetos 2.0: projetos, membros, recursos,
+ * tarefas, responsável, comentários (com tempo) e anexos, com invalidação.
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  listProjects, getProject, createProject, updateProject, archiveProject,
+  listProjects, getProject, createProject, updateProject, archiveProject, unarchiveProject,
+  addResource, removeResource,
   addMember, removeMember, addProjectComment,
-  listTasks, createTask, getTask, updateTask, moveTask,
-  assignTask, unassignTask, addTaskComment,
-  uploadAttachment, deleteAttachment,
+  listTasks, createTask, getTask, updateTask, moveTask, setAssignee,
+  addTaskComment, uploadAttachment, deleteAttachment,
+  getProjectsDashboard,
   type TaskStatus,
 } from "../../core/api/projetos.js";
 
@@ -21,6 +22,7 @@ const keys = {
   project: (id: string) => ["projetos", "project", id] as const,
   tasks: (projectId: string) => ["projetos", "tasks", projectId] as const,
   task: (id: string) => ["projetos", "task", id] as const,
+  dashboard: ["projetos", "dashboard"] as const,
 };
 
 // --- Projetos ---
@@ -63,6 +65,35 @@ export function useArchiveProject(id: string) {
   });
 }
 
+export function useUnarchiveProject(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => unarchiveProject(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.project(id) });
+      qc.invalidateQueries({ queryKey: keys.projects });
+    },
+  });
+}
+
+// --- Recursos ---
+
+export function useAddResource(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ description, cost }: { description: string; cost: number }) => addResource(projectId, description, cost),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.project(projectId) }),
+  });
+}
+
+export function useRemoveResource(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (resourceId: string) => removeResource(projectId, resourceId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.project(projectId) }),
+  });
+}
+
 // --- Membros ---
 
 export function useAddMember(projectId: string) {
@@ -102,7 +133,7 @@ export function useTask(id: string) {
 export function useCreateTask(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { title: string; description?: string | undefined }) => createTask(projectId, input),
+    mutationFn: (input: Parameters<typeof createTask>[1]) => createTask(projectId, input),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.tasks(projectId) }),
   });
 }
@@ -110,7 +141,7 @@ export function useCreateTask(projectId: string) {
 export function useUpdateTask(taskId: string, projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (patch: { title?: string; description?: string }) => updateTask(taskId, patch),
+    mutationFn: (patch: Parameters<typeof updateTask>[1]) => updateTask(taskId, patch),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keys.task(taskId) });
       qc.invalidateQueries({ queryKey: keys.tasks(projectId) });
@@ -127,29 +158,27 @@ export function useMoveTask(projectId: string) {
   });
 }
 
-// --- Atribuições e comentários de tarefa ---
+// --- Responsável e comentários de tarefa ---
 
-export function useAssignTask(taskId: string) {
+export function useSetAssignee(taskId: string, projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (userId: string) => assignTask(taskId, userId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.task(taskId) }),
+    mutationFn: (userId: string | null) => setAssignee(taskId, userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.task(taskId) });
+      qc.invalidateQueries({ queryKey: keys.tasks(projectId) });
+    },
   });
 }
 
-export function useUnassignTask(taskId: string) {
+export function useAddTaskComment(taskId: string, projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (userId: string) => unassignTask(taskId, userId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.task(taskId) }),
-  });
-}
-
-export function useAddTaskComment(taskId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: string) => addTaskComment(taskId, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.task(taskId) }),
+    mutationFn: ({ body, minutes }: { body: string; minutes?: number }) => addTaskComment(taskId, body, minutes ?? 0),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.task(taskId) });
+      qc.invalidateQueries({ queryKey: keys.tasks(projectId) });
+    },
   });
 }
 
@@ -167,4 +196,10 @@ export function useDeleteAttachment(taskId: string) {
     mutationFn: (attachmentId: string) => deleteAttachment(attachmentId),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.task(taskId) }),
   });
+}
+
+// --- Dashboard ---
+
+export function useProjectsDashboard() {
+  return useQuery({ queryKey: keys.dashboard, queryFn: getProjectsDashboard });
 }

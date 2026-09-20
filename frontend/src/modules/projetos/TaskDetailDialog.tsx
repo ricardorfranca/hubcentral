@@ -2,26 +2,30 @@
  * @file TaskDetailDialog.tsx
  * @module modules/projetos
  *
- * Diálogo de detalhe de tarefa: título/descrição, atribuídos (add/remove),
- * comentários (cronológico + novo) e anexos (upload, download, excluir).
+ * Diálogo de detalhe de tarefa (2.0): título/descrição, prazo, responsável
+ * único, visibilidade, dependência, comentários (com apontamento de tempo em
+ * horas/minutos) e anexos. Mostra o total de tempo apontado.
  */
 
 import { useState } from "react";
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, Stack, Typography, Divider,
-  List, ListItem, ListItemText, IconButton, TextField, Chip, MenuItem, CircularProgress, Link,
+  List, ListItem, ListItemText, IconButton, TextField, MenuItem, CircularProgress, Link,
+  FormControlLabel, Switch, Chip,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
 import {
-  useTask, useAddTaskComment, useAssignTask, useUnassignTask, useUploadAttachment, useDeleteAttachment,
+  useTask, useAddTaskComment, useSetAssignee, useUpdateTask, useUploadAttachment, useDeleteAttachment, useTasks,
 } from "./hooks.js";
 import { useCan } from "../../core/rbac/can.js";
 import { attachmentUrl, type ProjectMember } from "../../core/api/projetos.js";
+import { fmtMinutes } from "./format.js";
 
 /** Props do diálogo. */
 interface Props {
   taskId: string | null;
+  projectId: string;
   members: ProjectMember[];
   onClose: () => void;
 }
@@ -29,30 +33,40 @@ interface Props {
 /**
  * Diálogo de detalhe de tarefa.
  *
- * @param props - Tarefa selecionada, membros do projeto e callback de fechar.
+ * @param props - Tarefa selecionada, projeto, membros e callback de fechar.
  * @returns O diálogo, ou vazio se nenhuma tarefa selecionada.
  */
-export function TaskDetailDialog({ taskId, members, onClose }: Props): JSX.Element | null {
+export function TaskDetailDialog({ taskId, projectId, members, onClose }: Props): JSX.Element | null {
   const can = useCan();
   const { data: task, isLoading } = useTask(taskId ?? "");
+  const { data: allTasks } = useTasks(projectId);
 
-  const addComment = useAddTaskComment(taskId ?? "");
-  const assign = useAssignTask(taskId ?? "");
-  const unassign = useUnassignTask(taskId ?? "");
+  const addComment = useAddTaskComment(taskId ?? "", projectId);
+  const setAssignee = useSetAssignee(taskId ?? "", projectId);
+  const updateTask = useUpdateTask(taskId ?? "", projectId);
   const upload = useUploadAttachment(taskId ?? "");
   const removeAttachment = useDeleteAttachment(taskId ?? "");
 
   const [comment, setComment] = useState("");
-  const [assignee, setAssignee] = useState("");
+  const [hours, setHours] = useState("");
+  const [minutes, setMinutes] = useState("");
 
   if (!taskId) return null;
 
   const canComment = can("projetos:comentario:criar");
   const canAssign = can("projetos:tarefa:atribuir");
+  const canEdit = can("projetos:tarefa:editar");
   const canUpload = can("projetos:anexo:enviar");
   const canDeleteAtt = can("projetos:anexo:excluir");
 
-  const memberName = (id: string): string => members.find((m) => m.user_id === id)?.full_name ?? id;
+  const memberName = (id: string | null): string => id ? (members.find((m) => m.user_id === id)?.full_name ?? id) : "—";
+
+  function submitComment(): void {
+    const totalMin = (Number(hours) || 0) * 60 + (Number(minutes) || 0);
+    if (!comment.trim() && totalMin === 0) return;
+    addComment.mutate({ body: comment.trim() || "(apontamento de tempo)", minutes: totalMin });
+    setComment(""); setHours(""); setMinutes("");
+  }
 
   return (
     <Dialog open onClose={onClose} fullWidth maxWidth="sm">
@@ -65,37 +79,52 @@ export function TaskDetailDialog({ taskId, members, onClose }: Props): JSX.Eleme
             <Stack spacing={2} sx={{ mt: 1 }}>
               {task.description && <Typography variant="body2">{task.description}</Typography>}
 
-              <Divider textAlign="left"><Typography variant="caption">Atribuídos</Typography></Divider>
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                {task.assignees.length === 0 && <Typography variant="caption" color="text.secondary">Ninguém atribuído.</Typography>}
-                {task.assignees.map((uid) => (
-                  <Chip
-                    key={uid}
-                    label={memberName(uid)}
-                    {...(canAssign ? { onDelete: () => unassign.mutate(uid) } : {})}
-                  />
-                ))}
+                {task.due_date && <Chip size="small" label={`Prazo: ${new Date(task.due_date).toLocaleDateString("pt-BR")}`} />}
+                <Chip size="small" label={`Tempo: ${fmtMinutes(task.minutes_total)}`} />
+                {!task.visible_to_all && <Chip size="small" color="warning" label="Visibilidade restrita" />}
               </Stack>
-              {canAssign && (
-                <Stack direction="row" spacing={1}>
-                  <TextField
-                    select size="small" fullWidth label="Atribuir a"
-                    value={assignee}
-                    onChange={(e) => setAssignee(e.target.value)}
-                  >
-                    <MenuItem value="">Selecione…</MenuItem>
-                    {members
-                      .filter((m) => !task.assignees.includes(m.user_id))
-                      .map((m) => <MenuItem key={m.user_id} value={m.user_id}>{m.full_name ?? m.email}</MenuItem>)}
-                  </TextField>
-                  <Button
-                    variant="outlined"
-                    disabled={!assignee || assign.isPending}
-                    onClick={() => { assign.mutate(assignee); setAssignee(""); }}
-                  >
-                    Atribuir
-                  </Button>
-                </Stack>
+
+              <Divider textAlign="left"><Typography variant="caption">Responsável</Typography></Divider>
+              {canAssign ? (
+                <TextField
+                  select size="small" fullWidth label="Responsável"
+                  value={task.assignee_user_id ?? ""}
+                  onChange={(e) => setAssignee.mutate(e.target.value || null)}
+                >
+                  <MenuItem value="">—</MenuItem>
+                  {members.map((m) => <MenuItem key={m.user_id} value={m.user_id}>{m.full_name ?? m.email}</MenuItem>)}
+                </TextField>
+              ) : (
+                <Typography variant="body2">{memberName(task.assignee_user_id)}</Typography>
+              )}
+
+              {canEdit && (
+                <>
+                  <Divider textAlign="left"><Typography variant="caption">Configurações</Typography></Divider>
+                  <Stack direction="row" spacing={2}>
+                    <TextField
+                      label="Prazo" type="date" size="small" fullWidth
+                      value={task.due_date ? task.due_date.slice(0, 10) : ""}
+                      onChange={(e) => updateTask.mutate({ due_date: e.target.value })}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                    <TextField
+                      select size="small" fullWidth label="Depende de"
+                      value={task.depends_on_task_id ?? ""}
+                      onChange={(e) => updateTask.mutate({ depends_on_task_id: e.target.value || null })}
+                    >
+                      <MenuItem value="">Nenhuma</MenuItem>
+                      {(allTasks ?? []).filter((t) => t.id !== task.id).map((t) => (
+                        <MenuItem key={t.id} value={t.id}>{t.title}</MenuItem>
+                      ))}
+                    </TextField>
+                  </Stack>
+                  <FormControlLabel
+                    control={<Switch checked={task.visible_to_all} onChange={(e) => updateTask.mutate({ visible_to_all: e.target.checked })} />}
+                    label="Visível a todos os participantes do projeto"
+                  />
+                </>
               )}
 
               <Divider textAlign="left"><Typography variant="caption">Anexos</Typography></Divider>
@@ -124,44 +153,36 @@ export function TaskDetailDialog({ taskId, members, onClose }: Props): JSX.Eleme
               {canUpload && (
                 <Button variant="outlined" component="label" disabled={upload.isPending}>
                   Enviar anexo
-                  <input
-                    type="file"
-                    hidden
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) upload.mutate(f);
-                      e.target.value = "";
-                    }}
-                  />
+                  <input type="file" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) upload.mutate(f); e.target.value = ""; }} />
                 </Button>
               )}
 
-              <Divider textAlign="left"><Typography variant="caption">Comentários</Typography></Divider>
+              <Divider textAlign="left"><Typography variant="caption">Comentários e apontamentos</Typography></Divider>
               <List dense>
                 {task.comments.map((c) => (
                   <ListItem key={c.id} disableGutters>
                     <ListItemText
                       primary={c.body}
-                      secondary={`${c.author_name ?? "—"} — ${new Date(c.created_at).toLocaleString("pt-BR")}`}
+                      secondary={
+                        `${c.author_name ?? "—"} — ${new Date(c.created_at).toLocaleString("pt-BR")}` +
+                        ((c.minutes ?? 0) > 0 ? ` · ${fmtMinutes(c.minutes)}` : "")
+                      }
                     />
                   </ListItem>
                 ))}
                 {task.comments.length === 0 && <Typography variant="caption" color="text.secondary">Sem comentários.</Typography>}
               </List>
               {canComment && (
-                <Stack direction="row" spacing={1}>
+                <Stack spacing={1}>
                   <TextField
-                    size="small" fullWidth placeholder="Adicionar comentário…"
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
+                    size="small" fullWidth placeholder="Adicionar comentário…" multiline maxRows={4}
+                    value={comment} onChange={(e) => setComment(e.target.value)}
                   />
-                  <Button
-                    variant="outlined"
-                    disabled={!comment.trim() || addComment.isPending}
-                    onClick={() => { addComment.mutate(comment.trim()); setComment(""); }}
-                  >
-                    Enviar
-                  </Button>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <TextField size="small" type="number" label="Horas" sx={{ width: 100 }} value={hours} onChange={(e) => setHours(e.target.value)} />
+                    <TextField size="small" type="number" label="Minutos" sx={{ width: 100 }} value={minutes} onChange={(e) => setMinutes(e.target.value)} />
+                    <Button variant="outlined" onClick={submitComment} disabled={addComment.isPending}>Registrar</Button>
+                  </Stack>
                 </Stack>
               )}
             </Stack>

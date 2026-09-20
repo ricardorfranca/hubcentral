@@ -2,6 +2,41 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.8.0] - 2026-09-20
+
+### Adicionado — Plataforma
+
+- **Modo escuro**: alternância de tema (claro/escuro) no topo do portal, com preferência salva por usuário.
+- **Identidade visual configurável**: nome do sistema, logotipo (upload ou URL) e cores (primária/secundária) editáveis em Administração → Configurações; aplicados a todo o portal. Novo ícone do sistema.
+- **Conta de e-mail (SMTP)**: configuração de servidor de saída (host, porta com padrões 587/465, usuário, senha, remetente) com **teste de conexão** e envio de e-mail de teste. Base para todos os envios do sistema; o convite de usuário passa a enviar e-mail quando o SMTP está configurado.
+- **Backup e restauração** (SuperAdministrador): geração de um pacote com banco de dados e anexos para download, e restauração a partir do pacote, com confirmação forte na interface.
+
+### Adicionado — Projetos Internos 2.0
+
+- **Prazos**: prazo total do projeto e prazo por tarefa (limitado à data do projeto).
+- **Dependências entre tarefas**: uma tarefa pode depender de outra; só é possível iniciá-la após a dependência ser finalizada.
+- **Gráfico de Gantt** por projeto, além do Kanban.
+- **Sinalização de prazo no card**: vermelho suave para tarefas atrasadas e amarelo quando faltam poucos dias (limite configurável por tarefa ou projeto; padrão de 2 dias).
+- **Responsável único** por tarefa; todos os participantes podem visualizar e comentar. O dono do projeto pode restringir a visibilidade de tarefas específicas (padrão: visível a todos).
+- **Apontamento de tempo** por comentário (horas/minutos), com somatório no card da tarefa e total no projeto.
+- **Recursos e custos**: valor/hora do projeto (estimativa de custo de mão de obra a partir das horas) e custos diversos em R$.
+- **Anotação automática** ao mover um card entre colunas, registrando quem moveu.
+- **Desarquivar projeto**: permitido a SuperAdministradores e ao dono do projeto.
+- **Relatório executivo em PDF** do projeto (SuperAdministrador ou dono).
+- **Dashboard do SuperAdministrador** com quantitativos, horas e custos por projeto e totais.
+
+### Alterado
+
+- Anexos passam a ser exibidos em **MB**; o limite de tamanho é configurável (em MB) na Central de Configurações.
+- CRM: itens de listas configuráveis (etiquetas, origens etc.) podem ser **removidos**.
+- Usuários: o administrador pode **definir a senha** de um usuário diretamente na tela de Usuários.
+
+### Operação
+
+- Novas variáveis de ambiente opcionais de SMTP (`SMTP_*`) como fallback; preferencialmente configure pela Central de Configurações.
+- Backup/restore requerem `pg_dump`/`pg_restore` no servidor (pacote postgresql-client, já presente na implantação).
+- Novo namespace `core:backup:gerenciar` concedido ao SuperAdministrador; reaplicar via `scripts/reset-admin.sh` em ambientes existentes.
+
 ## [0.7.0] - 2026-09-20
 
 ### Adicionado — Módulo de Projetos Internos
