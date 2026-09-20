@@ -13,7 +13,7 @@ import {
   Select, MenuItem, FormControl, InputLabel,
 } from "@mui/material";
 import { addCrmItem, listCrmItems, getSla, setSla, type CrmListType } from "../../core/api/crm-extra.js";
-import { ACTIVE_STAGES } from "./pipeline.js";
+import { useStages } from "./sales-hooks.js";
 import type { SlaConfig } from "../../core/api/types.js";
 
 const LIST_TYPES: { type: CrmListType; label: string }[] = [
@@ -94,6 +94,9 @@ function SlaEditor({ columnId, label }: { columnId: string; label: string }): JS
  * @returns A tela de configurações.
  */
 export function SettingsPage(): JSX.Element {
+  const { data: stages } = useStages();
+  const activeStages = (stages ?? []).filter((s) => !s.terminal).sort((a, b) => a.position - b.position);
+
   return (
     <Box>
       <Typography variant="h5" sx={{ mb: 2 }}>Configurações do CRM</Typography>
@@ -109,7 +112,7 @@ export function SettingsPage(): JSX.Element {
       <Card variant="outlined">
         <CardContent>
           <Typography variant="h6" gutterBottom>SLA por etapa</Typography>
-          {ACTIVE_STAGES.map((s) => <SlaEditor key={s.id} columnId={s.id} label={s.label} />)}
+          {activeStages.map((s) => <SlaEditor key={s.id} columnId={s.id} label={s.label} />)}
         </CardContent>
       </Card>
     </Box>
