@@ -15,11 +15,13 @@ import {
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import AccountCircle from "@mui/icons-material/AccountCircle";
+import { ListSubheader } from "@mui/material";
 import { MODULE_REGISTRY } from "../core/modules/registry.js";
 import { useCan } from "../core/rbac/can.js";
 import { useBrandingStore } from "../core/branding/branding-store.js";
 import { useSessionStore } from "../core/auth/session-store.js";
 import { logout as apiLogout } from "../core/api/auth.js";
+import { NotificationBell } from "../core/notifications/NotificationBell.js";
 
 const DRAWER_WIDTH = 248;
 
@@ -39,10 +41,12 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
 
-  // Itens de menu visíveis: de todos os módulos permitidos, respeitando RBAC.
-  const menuItems = MODULE_REGISTRY.filter((m) => can(m.requiredNamespace)).flatMap((m) =>
-    m.menu.filter((entry) => can(entry.requiredNamespace)),
-  );
+  // Menu agrupado por módulo: para cada módulo permitido, os itens que o
+  // usuário pode ver. Módulos sem nenhum item visível são omitidos.
+  const menuGroups = MODULE_REGISTRY
+    .filter((m) => can(m.requiredNamespace))
+    .map((m) => ({ title: m.title, items: m.menu.filter((entry) => can(entry.requiredNamespace)) }))
+    .filter((g) => g.items.length > 0);
 
   async function handleLogout(): Promise<void> {
     setAnchor(null);
@@ -63,27 +67,33 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
         </Typography>
       </Toolbar>
       <Divider />
-      <List>
-        {menuItems.map((entry) => {
-          const Icon = entry.icon;
-          const selected = location.pathname.startsWith(entry.path);
-          return (
-            <ListItemButton
-              key={entry.path}
-              selected={selected}
-              onClick={() => {
-                navigate(entry.path);
-                setMobileOpen(false);
-              }}
-            >
-              <ListItemIcon>
-                <Icon />
-              </ListItemIcon>
-              <ListItemText primary={entry.label} />
-            </ListItemButton>
-          );
-        })}
-      </List>
+      {menuGroups.map((group, gi) => (
+        <List
+          key={group.title}
+          subheader={<ListSubheader component="div" disableSticky>{group.title}</ListSubheader>}
+          sx={{ borderTop: gi > 0 ? 1 : 0, borderColor: "divider" }}
+        >
+          {group.items.map((entry) => {
+            const Icon = entry.icon;
+            const selected = location.pathname.startsWith(entry.path);
+            return (
+              <ListItemButton
+                key={entry.path}
+                selected={selected}
+                onClick={() => {
+                  navigate(entry.path);
+                  setMobileOpen(false);
+                }}
+              >
+                <ListItemIcon>
+                  <Icon />
+                </ListItemIcon>
+                <ListItemText primary={entry.label} />
+              </ListItemButton>
+            );
+          })}
+        </List>
+      ))}
     </Box>
   );
 
@@ -103,6 +113,7 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
           <Typography variant="h6" noWrap sx={{ flexGrow: 1 }}>
             {systemName}
           </Typography>
+          <NotificationBell />
           <IconButton color="inherit" onClick={(e) => setAnchor(e.currentTarget)} aria-label="conta">
             <AccountCircle />
           </IconButton>

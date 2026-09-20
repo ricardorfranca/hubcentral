@@ -35,10 +35,10 @@ Plano incremental. Cada tarefa referencia os requisitos que atende. Backend com 
 
 ## Fase 5 — Frontend: núcleo (notificações, settings, menu agrupado)
 
-- [ ] 5.1 `core/api/notifications.ts` + `core/notifications/hooks.ts` (`useUnreadCount` com refetchInterval, `useNotifications`, `useMarkRead`). _Req 8_
-- [ ] 5.2 `core/notifications/NotificationBell.tsx` no `AppBar` do Shell: badge de não lidas, popover com lista, clicar navega para `link` e marca lida, "marcar todas". _Req 8_
-- [ ] 5.3 Menu lateral agrupado por módulo no `Shell.tsx`: cabeçalho (`ListSubheader`) por módulo, itens filtrados por RBAC, seção omitida se sem permissão. _Req 11_
-- [ ] 5.4 `core/api/settings.ts` + `modules/admin/SettingsPage.tsx`: lista agrupada por módulo, editor por `value_type`; item de menu do Admin sob `core:config:gerenciar`. _Req 13_
+- [x] 5.1 `core/api/notifications.ts` + `core/notifications/hooks.ts` (`useUnreadCount` com refetchInterval, `useNotifications`, `useMarkRead`). _Req 8_
+- [x] 5.2 `core/notifications/NotificationBell.tsx` no `AppBar` do Shell: badge de não lidas, popover com lista, clicar navega para `link` e marca lida, "marcar todas". _Req 8_
+- [x] 5.3 Menu lateral agrupado por módulo no `Shell.tsx`: cabeçalho (`ListSubheader`) por módulo, itens filtrados por RBAC, seção omitida se sem permissão. _Req 11_
+- [x] 5.4 `core/api/settings.ts` + `modules/admin/SettingsPage.tsx`: lista agrupada por módulo, editor por `value_type`; item de menu do Admin sob `core:config:gerenciar`. _Req 13_
 
 ## Fase 6 — Frontend: telas do módulo Projetos
 

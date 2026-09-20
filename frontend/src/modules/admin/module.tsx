@@ -8,10 +8,12 @@
  */
 
 import PeopleIcon from "@mui/icons-material/People";
+import TuneIcon from "@mui/icons-material/Tune";
 import type { ModuleDefinition } from "../../core/modules/types.js";
 import { UsersPage } from "./UsersPage.js";
+import { SettingsPage } from "./SettingsPage.js";
 
-/** Módulo de administração de usuários. */
+/** Módulo de administração de usuários e configurações do sistema. */
 export const adminModule: ModuleDefinition = {
   id: "admin",
   title: "Administração",
@@ -19,6 +21,10 @@ export const adminModule: ModuleDefinition = {
   requiredNamespace: "core:usuarios:gerenciar",
   menu: [
     { label: "Usuários", path: "/admin/usuarios", icon: PeopleIcon, requiredNamespace: "core:usuarios:gerenciar" },
+    { label: "Configurações", path: "/admin/configuracoes", icon: TuneIcon, requiredNamespace: "core:config:gerenciar" },
   ],
-  routes: [{ path: "admin/usuarios", element: <UsersPage /> }],
+  routes: [
+    { path: "admin/usuarios", element: <UsersPage /> },
+    { path: "admin/configuracoes", element: <SettingsPage /> },
+  ],
 };
