@@ -18,6 +18,7 @@ set -euo pipefail
 
 # ----- Configuração -----
 REPO_URL="https://github.com/ricardorfranca/hubcentral.git"
+REPO_SLUG="ricardorfranca/hubcentral"
 INSTALL_DIR="${INSTALL_DIR:-/opt/hubcentral}"
 SERVICE_USER="hubcentral"
 SERVICE_NAME="hubcentral"
@@ -286,14 +287,44 @@ EOF
 
 # ----- Frontend + nginx -----
 
-# Compila o frontend (SPA) em frontend/dist.
-build_frontend() {
+# Compila o frontend localmente (fallback). Pesado; pode exceder a memória de
+# VMs pequenas — por isso o caminho preferido é baixar o artefato pré-compilado.
+build_frontend_local() {
+  log "Compilando o frontend localmente (fallback)..."
+  ( cd "$INSTALL_DIR/frontend" && npm ci --no-audit --no-fund && npm run build )
+}
+
+# Obtém o frontend/dist. Preferência: baixar o artefato pré-compilado
+# (frontend-dist.tar.gz) anexado à release da tag, evitando compilar no
+# servidor (ideal para VMs pequenas). Se não houver artefato (ex.: REF é um
+# branch), cai para o build local.
+fetch_frontend() {
   if [ ! -d "$INSTALL_DIR/frontend" ]; then
-    warn "Diretório frontend/ ausente; pulando build do frontend."
+    warn "Diretório frontend/ ausente; pulando frontend."
     return
   fi
-  log "Instalando dependências e compilando o frontend..."
-  ( cd "$INSTALL_DIR/frontend" && npm ci --no-audit --no-fund && npm run build )
+
+  # Descobre a tag da release: usa a versão do package.json (v<versão>).
+  local version tag tarball url
+  version="$(node -p "require('$INSTALL_DIR/package.json').version" 2>/dev/null || echo "")"
+  tag="v${version}"
+  tarball="$(mktemp --suffix=.tar.gz)"
+  url="https://github.com/${REPO_SLUG}/releases/download/${tag}/frontend-dist.tar.gz"
+
+  if [ -n "$version" ] && curl -fsSL "$url" -o "$tarball" 2>/dev/null; then
+    log "Baixando frontend pré-compilado da release ${tag}..."
+    rm -rf "$INSTALL_DIR/frontend/dist"
+    if tar -xzf "$tarball" -C "$INSTALL_DIR/frontend" 2>/dev/null && [ -d "$INSTALL_DIR/frontend/dist" ]; then
+      rm -f "$tarball"
+      log "Frontend pré-compilado instalado."
+      return
+    fi
+    warn "Falha ao extrair o artefato; tentando build local."
+  else
+    warn "Artefato pré-compilado indisponível para ${tag}; compilando localmente."
+  fi
+  rm -f "$tarball"
+  build_frontend_local
 }
 
 # Instala e configura o nginx para servir a SPA e fazer proxy de /api.
@@ -375,6 +406,41 @@ bootstrap_admin() {
   fi
 }
 
+# ----- Swap temporário (VMs pequenas) -----
+
+SWAP_FILE="/swapfile.hubcentral"
+SWAP_ADDED=0
+
+# Ativa um swap temporário se a RAM for pequena (< 2 GB) e não houver swap,
+# evitando que o build do backend (tsc) seja morto por falta de memória (OOM).
+ensure_swap() {
+  local mem_kb swap_kb
+  mem_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+  swap_kb="$(awk '/SwapTotal/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+  # < ~2GB de RAM e sem swap ativo.
+  if [ "$mem_kb" -lt 2000000 ] && [ "$swap_kb" -lt 262144 ] && [ ! -f "$SWAP_FILE" ]; then
+    log "Memória baixa detectada; ativando swap temporário de 2G para o build..."
+    if fallocate -l 2G "$SWAP_FILE" 2>/dev/null || dd if=/dev/zero of="$SWAP_FILE" bs=1M count=2048 2>/dev/null; then
+      chmod 600 "$SWAP_FILE"
+      mkswap "$SWAP_FILE" >/dev/null 2>&1 || true
+      if swapon "$SWAP_FILE" 2>/dev/null; then
+        SWAP_ADDED=1
+      else
+        rm -f "$SWAP_FILE"
+      fi
+    fi
+  fi
+}
+
+# Desativa e remove o swap temporário criado por ensure_swap.
+cleanup_swap() {
+  if [ "$SWAP_ADDED" -eq 1 ]; then
+    swapoff "$SWAP_FILE" 2>/dev/null || true
+    rm -f "$SWAP_FILE"
+    SWAP_ADDED=0
+  fi
+}
+
 # ----- Fluxo principal -----
 
 main() {
@@ -393,8 +459,15 @@ main() {
   create_service_user
   fetch_code
   ensure_env
+
+  ensure_swap
+  # Garante a limpeza do swap mesmo se um passo abaixo falhar.
+  trap cleanup_swap EXIT
   build_app
-  build_frontend
+  fetch_frontend
+  cleanup_swap
+  trap - EXIT
+
   run_migrations
   bootstrap_admin
   set_ownership

@@ -190,6 +190,10 @@ curl -sSL https://raw.githubusercontent.com/ricardorfranca/hubcentral/main/scrip
 7. Compila o **frontend** e instala/configura o **nginx** para servir o portal web (porta 80) com reverse proxy de `/api`.
 8. Cria o **SuperAdministrador** inicial (apenas na primeira instalação).
 
+### VMs pequenas (ex.: 1 GB de RAM)
+
+O frontend é compilado no CI e publicado como artefato da release; o instalador baixa o `dist` pronto, sem compilar no servidor. Além disso, se houver pouca RAM e nenhum swap, o instalador ativa um swap temporário de 2 GB durante o build do backend e o remove ao final. Assim a instalação funciona mesmo em VMs de 1 GB.
+
 ### Primeiro acesso (SuperAdministrador)
 
 Na primeira instalação, o script cria um SuperAdministrador e concede todas as permissões. Você pode definir as credenciais por ambiente:

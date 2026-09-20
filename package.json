@@ -1,6 +1,6 @@
 {
   "name": "hub-central",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "HUB Central — plataforma parametrizável de centralização, orquestração e integração de serviços. Núcleo: Base Central de Contatos + Contrato de Módulos.",
   "license": "UNLICENSED",
   "private": true,

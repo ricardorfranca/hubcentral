@@ -1,0 +1,40 @@
+name: Release
+
+# Em cada tag v*, compila o frontend e anexa o artefato pronto à release,
+# para que servidores pequenos (ex.: VMs de 1GB) não precisem compilar.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-attach:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build do frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Empacotar dist
+        run: tar -czf frontend-dist.tar.gz -C frontend dist
+
+      - name: Anexar artefato à release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A release da tag já existe (criada via gh release create). Anexa o
+          # artefato; --clobber substitui se já houver.
+          gh release upload "${GITHUB_REF_NAME}" frontend-dist.tar.gz --clobber

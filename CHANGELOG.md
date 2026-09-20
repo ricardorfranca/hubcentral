@@ -2,6 +2,17 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.5.0] - 2026-09-19
+
+### Alterado
+
+- **Frontend pré-compilado na release**: um workflow do GitHub Actions compila o frontend a cada tag e anexa `frontend-dist.tar.gz` à release. O instalador passa a **baixar o artefato pronto** em vez de compilar no servidor — resolve falhas de memória (OOM) em VMs pequenas (ex.: 1 GB). Se o artefato não estiver disponível, o instalador cai para o build local.
+- **Swap temporário no instalador**: em máquinas com pouca RAM e sem swap, o instalador ativa um swap temporário de 2 GB durante o build do backend e o remove ao final.
+
+### Adicionado
+
+- Workflow de **CI** (typecheck, testes e build de backend e frontend) em push/PR para `main`.
+
 ## [0.4.3] - 2026-09-19
 
 ### Corrigido
