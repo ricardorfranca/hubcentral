@@ -90,8 +90,13 @@ export function KanbanBoard(): JSX.Element {
                   <CardActionArea onClick={() => navigate(`/crm/leads/${lead.id}`)}>
                     <CardContent sx={{ py: 1.5 }}>
                       <Typography variant="body2" fontWeight={600}>
-                        Lead {lead.id.slice(0, 8)}
+                        {lead.person_name || `Lead ${lead.id.slice(0, 8)}`}
                       </Typography>
+                      {lead.company_name && (
+                        <Typography variant="caption" display="block" color="text.secondary">
+                          {lead.company_name}
+                        </Typography>
+                      )}
                       <Typography variant="caption" color="text.secondary">
                         {lead.status}
                       </Typography>

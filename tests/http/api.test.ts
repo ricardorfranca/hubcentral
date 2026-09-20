@@ -130,6 +130,24 @@ describe("API do CRM", () => {
     expect(view.json().person.email.toLowerCase()).toBe(email.toLowerCase());
   });
 
+  it("lista os leads e inclui o lead recém-criado com o nome do contato", async () => {
+    const fullName = `Lead Lista ${Math.random().toString(36).slice(2)}`;
+    const email = `leadlist-${Math.random().toString(36).slice(2)}@example.com`;
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/crm/leads",
+      headers: auth(),
+      payload: { person: { full_name: fullName, email, phone: "11999990000" } },
+    });
+    const leadId = created.json().id;
+
+    const list = await app.inject({ method: "GET", url: "/api/crm/leads", headers: auth() });
+    expect(list.statusCode).toBe(200);
+    const found = (list.json() as { id: string; person_name: string | null }[]).find((l) => l.id === leadId);
+    expect(found).toBeDefined();
+    expect(found?.person_name).toBe(fullName);
+  });
+
   it("move e finaliza um lead", async () => {
     const email = `leadmv-${Math.random().toString(36).slice(2)}@example.com`;
     const created = await app.inject({

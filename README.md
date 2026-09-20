@@ -203,11 +203,22 @@ curl -sSL https://raw.githubusercontent.com/ricardorfranca/hubcentral/main/scrip
   | sudo HUBCENTRAL_ADMIN_EMAIL="voce@empresa.com" HUBCENTRAL_ADMIN_PASSWORD="suaSenhaForte" sh
 ```
 
-Se não forem informadas, o script gera uma senha aleatória e a **exibe uma única vez** ao final da instalação. Em atualizações, o SuperAdministrador não é recriado. Para criar/reset manualmente:
+Se não forem informadas, o script gera uma senha aleatória e a **exibe uma única vez** ao final da instalação. Em atualizações, o SuperAdministrador não é recriado.
+
+**Descobrir o SuperAdministrador atual:**
 
 ```bash
-cd /opt/hubcentral && sudo npm run create-admin -- "email@empresa.com" "senha"
+cd /opt/hubcentral && set -a && . ./.env && set +a
+sudo -u postgres psql "$DATABASE_URL" -c "SELECT email, role, status FROM core.users WHERE role='superadmin';"
 ```
+
+**Redefinir a senha (ou criar) do SuperAdministrador** — use o script pronto (idempotente):
+
+```bash
+sudo /opt/hubcentral/scripts/reset-admin.sh "email@empresa.com" "NovaSenhaForte"
+```
+
+O script define a senha, garante o papel `superadmin` e concede todas as permissões. A senha já fica ativa (sem tela de troca no primeiro acesso).
 
 ### Banco de dados
 

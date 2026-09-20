@@ -2,6 +2,16 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.5.1] - 2026-09-20
+
+### Corrigido
+
+- **Leads não apareciam no pipeline após criados**: a rota de listagem `GET /api/crm/leads` não existia (só havia a de um lead específico), então o Kanban recebia erro e ficava vazio. Adicionados o serviço `listLeads` e a rota, que retornam os leads com o nome do contato resolvido da Base Central. O card do Kanban passa a exibir o nome da pessoa (e da empresa, quando houver).
+
+### Adicionado
+
+- **Script `scripts/reset-admin.sh`**: redefine (ou cria) o SuperAdministrador de forma simples no servidor, encapsulando o carregamento do `.env` e o CLI idempotente. Documentado no README.
+
 ## [0.5.0] - 2026-09-19
 
 ### Alterado

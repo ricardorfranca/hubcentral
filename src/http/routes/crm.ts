@@ -14,6 +14,7 @@ import {
   moveLead,
   finalizeLead,
   getLeadView,
+  listLeads,
   type CreateLeadInput,
 } from "../../modules/crm/lead-service.js";
 
@@ -24,6 +25,12 @@ import {
  * @param pool - Pool de conexões.
  */
 export function registerCrmRoutes(app: FastifyInstance, pool: Pool): void {
+  // Listar leads (pipeline), com nome do contato resolvido.
+  app.get("/api/crm/leads", async (_request, reply) => {
+    const leads = await withTransaction(pool, (client) => listLeads(client));
+    return reply.send(leads);
+  });
+
   // Criar lead (find-or-create de contatos + publica crm.lead.criado).
   app.post<{ Body: CreateLeadInput }>("/api/crm/leads", async (request, reply) => {
     const lead = await withTransaction(pool, (client) =>

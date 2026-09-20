@@ -41,6 +41,10 @@ export interface Lead {
   assigned_to: string | null;
   column_id: string;
   status: "active" | "won" | "lost" | "discarded";
+  /** Nome do contato pessoa, resolvido da Base Central (na listagem). */
+  person_name?: string | null;
+  /** Nome da empresa, resolvido da Base Central (na listagem). */
+  company_name?: string | null;
 }
 
 /** Visão de lead com dados de contato resolvidos da Base Central. */

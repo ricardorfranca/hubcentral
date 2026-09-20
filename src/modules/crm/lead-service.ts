@@ -43,6 +43,32 @@ export interface Lead {
   status: string;
 }
 
+/** Lead para a listagem do Kanban, com nome do contato resolvido. */
+export interface LeadListItem extends Lead {
+  person_name: string | null;
+  company_name: string | null;
+}
+
+/**
+ * Lista os leads ativos (não descartados/finalizados sob demanda) com o nome do
+ * contato resolvido da Base Central, para exibição no pipeline. Ordena por
+ * criação mais recente.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @returns Lista de leads com nomes de contato.
+ */
+export async function listLeads(client: PoolClient): Promise<LeadListItem[]> {
+  const { rows } = await client.query<LeadListItem>(
+    `SELECT l.id, l.person_contact_id, l.company_contact_id, l.assigned_to, l.column_id, l.status,
+            p.full_name AS person_name, e.legal_name AS company_name
+     FROM mod_crm.leads l
+     LEFT JOIN core.contacts p ON p.id = l.person_contact_id
+     LEFT JOIN core.contacts e ON e.id = l.company_contact_id
+     ORDER BY l.created_at DESC`,
+  );
+  return rows;
+}
+
 /**
  * Cria um lead referenciando contatos centrais (Req 14.1–14.3). Faz
  * find-or-create da pessoa (por e-mail) e da empresa (por documento fiscal),
