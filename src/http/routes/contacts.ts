@@ -14,9 +14,13 @@ import {
   getContactData,
   updateContact,
   deleteContact,
+  listContacts,
   type ContactPatch,
 } from "../../core/contacts/contact-service.js";
 import type { ContactInput } from "../../core/contacts/types.js";
+import {
+  listCategories, createCustomCategory, assignCategory, unassignCategory,
+} from "../../core/contacts/category-service.js";
 import {
   createSegment,
   evaluateSegment,
@@ -30,6 +34,46 @@ import {
  * @param pool - Pool de conexões.
  */
 export function registerContactRoutes(app: FastifyInstance, pool: Pool): void {
+  // Listar contatos (com rótulos), filtrando por tipo e/ou texto.
+  app.get<{ Querystring: { type?: "pessoa" | "empresa"; search?: string } }>(
+    "/api/contacts",
+    async (request, reply) => {
+      const items = await withTransaction(pool, (client) =>
+        listContacts(client, {
+          type: request.query.type,
+          search: request.query.search,
+        }),
+      );
+      return reply.send(items);
+    },
+  );
+
+  // Categorias (rótulos): listar e criar.
+  app.get("/api/contacts/categories", async (_request, reply) => {
+    const categories = await withTransaction(pool, (client) => listCategories(client));
+    return reply.send(categories);
+  });
+  app.post<{ Body: { name: string } }>("/api/contacts/categories", async (request, reply) => {
+    const category = await withTransaction(pool, (client) => createCustomCategory(client, request.body.name));
+    return reply.status(201).send(category);
+  });
+
+  // Atribuir/remover rótulo a um contato.
+  app.post<{ Params: { id: string }; Body: { category_id: string } }>(
+    "/api/contacts/:id/labels",
+    async (request, reply) => {
+      await withTransaction(pool, (client) => assignCategory(client, request.params.id, request.body.category_id));
+      return reply.status(204).send();
+    },
+  );
+  app.delete<{ Params: { id: string; categoryId: string } }>(
+    "/api/contacts/:id/labels/:categoryId",
+    async (request, reply) => {
+      await withTransaction(pool, (client) => unassignCategory(client, request.params.id, request.params.categoryId));
+      return reply.status(204).send();
+    },
+  );
+
   // Criar contato.
   app.post<{ Body: ContactInput }>("/api/contacts", async (request, reply) => {
     const contact = await withTransaction(pool, (client) =>

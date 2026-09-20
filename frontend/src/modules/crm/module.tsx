@@ -36,7 +36,7 @@ export const crmModule: ModuleDefinition = {
   requiredNamespace: "crm:oportunidades:visualizar",
   menu: [
     { label: "Oportunidades", path: "/crm", icon: ViewKanbanIcon, requiredNamespace: "crm:oportunidades:visualizar" },
-    { label: "Contas", path: "/crm/contas", icon: BusinessIcon, requiredNamespace: "crm:contas:visualizar" },
+    { label: "Empresas", path: "/crm/contas", icon: BusinessIcon, requiredNamespace: "crm:contas:visualizar" },
     { label: "Atividades", path: "/crm/atividades", icon: ChecklistIcon, requiredNamespace: "crm:atividades:visualizar" },
     { label: "Receita Previsível", path: "/crm/dashboards", icon: InsightsIcon, requiredNamespace: "crm:forecast:visualizar" },
     { label: "Conversas", path: "/crm/conversas", icon: ForumIcon, requiredNamespace: "crm:conversas:visualizar" },

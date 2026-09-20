@@ -111,6 +111,24 @@ export async function assignCategory(
 }
 
 /**
+ * Remove a associação de uma categoria a um contato. Idempotente.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param contactId - `contact_id` do contato.
+ * @param categoryId - `id` da categoria.
+ */
+export async function unassignCategory(
+  client: PoolClient,
+  contactId: string,
+  categoryId: string,
+): Promise<void> {
+  await client.query(
+    `DELETE FROM core.contact_category_assignments WHERE contact_id = $1 AND category_id = $2`,
+    [contactId, categoryId],
+  );
+}
+
+/**
  * Retorna os `contact_id` dos contatos associados a QUALQUER uma das categorias
  * informadas (Req 3.6). Sem duplicatas.
  *

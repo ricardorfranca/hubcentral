@@ -36,10 +36,10 @@ export function AccountsPage(): JSX.Element {
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Typography variant="h5">Contas</Typography>
+        <Typography variant="h5">Empresas</Typography>
         {can("crm:contas:criar") && (
           <Button startIcon={<AddIcon />} variant="contained" onClick={() => setDialogOpen(true)}>
-            Nova conta
+            Nova empresa
           </Button>
         )}
       </Stack>
@@ -66,7 +66,7 @@ export function AccountsPage(): JSX.Element {
               </TableRow>
             ))}
             {(accounts ?? []).length === 0 && (
-              <TableRow><TableCell colSpan={5}><Typography color="text.secondary">Nenhuma conta cadastrada.</Typography></TableCell></TableRow>
+              <TableRow><TableCell colSpan={5}><Typography color="text.secondary">Nenhuma empresa cadastrada.</Typography></TableCell></TableRow>
             )}
           </TableBody>
         </Table>
@@ -111,7 +111,7 @@ function NewAccountDialog({ open, onClose }: { open: boolean; onClose: () => voi
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Nova conta</DialogTitle>
+      <DialogTitle>Nova empresa</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}

@@ -111,6 +111,57 @@ export async function createContact(
   return created;
 }
 
+/** Contato com rótulos (categorias) resolvidos, para listagem. */
+export interface ContactListItem extends Contact {
+  labels: { id: string; name: string }[];
+}
+
+/**
+ * Lista contatos ativos (não mesclados), com seus rótulos, opcionalmente
+ * filtrados por tipo e por texto (nome/e-mail/razão social/documento).
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param options - `type` (pessoa|empresa), `search` (texto), `limit` (default 200).
+ * @returns Contatos com rótulos, ordenados por nome.
+ */
+export async function listContacts(
+  client: PoolClient,
+  options: { type?: "pessoa" | "empresa" | undefined; search?: string | undefined; limit?: number | undefined } = {},
+): Promise<ContactListItem[]> {
+  const params: unknown[] = [];
+  const where: string[] = ["c.merged_into IS NULL"];
+  if (options.type) {
+    params.push(options.type);
+    where.push(`c.contact_type = $${params.length}`);
+  }
+  if (options.search && options.search.trim()) {
+    params.push(`%${options.search.trim()}%`);
+    const p = `$${params.length}`;
+    where.push(
+      `(c.full_name ILIKE ${p} OR c.email::text ILIKE ${p} OR c.legal_name ILIKE ${p} OR c.fiscal_document::text ILIKE ${p} OR c.phone ILIKE ${p})`,
+    );
+  }
+  params.push(options.limit ?? 200);
+  const limitParam = `$${params.length}`;
+
+  const { rows } = await client.query<ContactListItem>(
+    `SELECT ${CONTACT_COLUMNS.split(", ").map((col) => `c.${col}`).join(", ")},
+            COALESCE(
+              (SELECT json_agg(json_build_object('id', cat.id, 'name', cat.name) ORDER BY cat.name)
+               FROM core.contact_category_assignments a
+               JOIN core.contact_categories cat ON cat.id = a.category_id
+               WHERE a.contact_id = c.id),
+              '[]'::json
+            ) AS labels
+     FROM core.contacts c
+     WHERE ${where.join(" AND ")}
+     ORDER BY COALESCE(c.full_name, c.legal_name)
+     LIMIT ${limitParam}`,
+    params,
+  );
+  return rows;
+}
+
 /** Campos de contato que podem ser atualizados. */
 export interface ContactPatch {
   full_name?: string;
