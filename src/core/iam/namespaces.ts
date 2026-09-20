@@ -54,6 +54,18 @@ export const CRM_NAMESPACES: readonly string[] = [
   "crm:config:usuarios:criar",
   "crm:config:usuarios:editar_dados",
   "crm:config:usuarios:alterar_perfil",
+  // CRM 2.0 — Receita Previsível
+  "crm:contas:visualizar",
+  "crm:contas:criar",
+  "crm:contas:editar",
+  "crm:oportunidades:visualizar",
+  "crm:oportunidades:criar",
+  "crm:oportunidades:editar",
+  "crm:oportunidades:mover",
+  "crm:oportunidades:finalizar",
+  "crm:atividades:visualizar",
+  "crm:atividades:gerenciar",
+  "crm:forecast:visualizar",
 ];
 
 /** Todos os namespaces conhecidos (núcleo + módulos). */

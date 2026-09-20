@@ -119,6 +119,18 @@ export const ErrorCode = {
   IAM_INVALID_SESSION: "IAM_INVALID_SESSION",
   /** Conta desabilitada. */
   IAM_USER_DISABLED: "IAM_USER_DISABLED",
+  /** CNPJ inválido ao criar conta (Req CRM 2.0 1.2). */
+  CRM_INVALID_CNPJ: "CRM_INVALID_CNPJ",
+  /** Oportunidade sem conta associada. */
+  CRM_OPP_NO_ACCOUNT: "CRM_OPP_NO_ACCOUNT",
+  /** Finalização de oportunidade sem valores (ganho) ou sem motivo (perdido). */
+  CRM_OPP_FINALIZE_INVALID: "CRM_OPP_FINALIZE_INVALID",
+  /** Estágio inexistente. */
+  CRM_STAGE_NOT_FOUND: "CRM_STAGE_NOT_FOUND",
+  /** Oportunidade não encontrada. */
+  CRM_OPP_NOT_FOUND: "CRM_OPP_NOT_FOUND",
+  /** Conta não encontrada. */
+  CRM_ACCOUNT_NOT_FOUND: "CRM_ACCOUNT_NOT_FOUND",
 } as const;
 
 /** União dos valores de {@link ErrorCode}. */

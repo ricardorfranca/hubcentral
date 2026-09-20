@@ -14,6 +14,7 @@ import { registerCrmRoutes } from "./routes/crm.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerUserRoutes } from "./routes/users.js";
 import { registerCrmExtraRoutes, registerCrmMessagingRoutes } from "./routes/crm-extra.js";
+import { registerCrmSalesRoutes } from "./routes/crm-sales.js";
 import { validateSession } from "../core/iam/session-service.js";
 
 /** Extensão do request com o usuário autenticado. */
@@ -82,6 +83,7 @@ export function buildApp(pool: Pool): FastifyInstance {
   registerCrmRoutes(app, pool);
   registerCrmExtraRoutes(app, pool);
   registerCrmMessagingRoutes(app, pool);
+  registerCrmSalesRoutes(app, pool);
 
   return app;
 }
