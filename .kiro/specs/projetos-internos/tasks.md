@@ -22,10 +22,10 @@ Plano incremental. Cada tarefa referencia os requisitos que atende. Backend com 
 
 ## Fase 3 — Módulo Projetos: tarefas, atribuição, comentários, eventos
 
-- [ ] 3.1 `task-service.ts`: createTask (posição no fim da coluna, bloqueia se arquivado), updateTask, `listTasksByProject` (agrupado por status/ordenado), `moveTask` (audita + publica `projetos.tarefa.movida`). Testes de Kanban e ordenação. _Req 3, 4_
-- [ ] 3.2 `assignment-service.ts`: assign (valida dono/membro; publica `projetos.tarefa.atribuida`), unassign; auditoria. Testes. _Req 5_
-- [ ] 3.3 `comment-service.ts`: addTaskComment (`projetos.comentario.criado`), addProjectComment (`projetos.projeto.comentario.criado`); auditoria. Testes cronologia. _Req 6, 12_
-- [ ] 3.4 `notifier.ts`: `registerProjetosNotifier` assina `projetos.*` e cria notificações para os destinatários corretos (inclui dono, exclui autor; comentário de projeto → dono + membros). Chamar no bootstrap junto ao outbox worker. Testes evento→notificação + dedupe por `source_event_id`. _Req 4, 5, 6, 8, 10, 12_
+- [x] 3.1 `task-service.ts`: createTask (posição no fim da coluna, bloqueia se arquivado), updateTask, `listTasksByProject` (agrupado por status/ordenado), `moveTask` (audita + publica `projetos.tarefa.movida`). Testes de Kanban e ordenação. _Req 3, 4_
+- [x] 3.2 `assignment-service.ts`: assign (valida dono/membro; publica `projetos.tarefa.atribuida`), unassign; auditoria. Testes. _Req 5_
+- [x] 3.3 `comment-service.ts`: addTaskComment (`projetos.comentario.criado`), addProjectComment (`projetos.projeto.comentado`); auditoria. Testes cronologia. _Req 6, 12_
+- [x] 3.4 `notifier.ts`: `registerProjetosNotifier` assina `projetos.*` e cria notificações para os destinatários corretos (inclui dono, exclui autor; comentário de projeto → dono + membros). Chamar no bootstrap junto ao outbox worker. Testes evento→notificação + dedupe por `source_event_id`. _Req 4, 5, 6, 8, 10, 12_
 
 ## Fase 4 — Módulo Projetos: anexos e rotas HTTP
 

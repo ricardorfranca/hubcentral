@@ -193,7 +193,7 @@ projetos:anexo:excluir        projetos:notificacoes:visualizar
 | `projetos.tarefa.movida` | Tarefa muda de coluna | `task_id`, `project_id`, `from`, `to`, `actor_user_id` |
 | `projetos.tarefa.atribuida` | Nova atribuição | `task_id`, `project_id`, `assignee_user_id`, `actor_user_id` |
 | `projetos.comentario.criado` | Comentário em tarefa | `task_id`, `project_id`, `comment_id`, `actor_user_id` |
-| `projetos.projeto.comentario.criado` | Comentário no projeto | `project_id`, `comment_id`, `actor_user_id` |
+| `projetos.projeto.comentado` | Comentário no projeto | `project_id`, `comment_id`, `actor_user_id` |
 
 Todos seguem o formato `[modulo].[recurso].[acao]` exigido pelo `event-bus` e são publicados com `publish(client, buildEnvelope(...))` na mesma transação da mudança.
 
@@ -209,7 +209,7 @@ Um único assinante do módulo (`registerProjetosNotifier`, chamado no bootstrap
 | `projetos.tarefa.movida` | Atribuídos da tarefa + Dono_Projeto |
 | `projetos.tarefa.atribuida` | Usuário atribuído + Dono_Projeto |
 | `projetos.comentario.criado` | Atribuídos da tarefa + Dono_Projeto |
-| `projetos.projeto.comentario.criado` | Dono_Projeto + todos os Membros do projeto |
+| `projetos.projeto.comentado` | Dono_Projeto + todos os Membros do projeto |
 
 Como o `dispatchPending` roda pós-commit e a entrega é "ao menos uma vez", o handler faz insert idempotente por `(recipient, type, entity_id, created within event)` — na prática, deduplicamos por `event_id` guardado em `notifications` (coluna opcional `source_event_id`) para não duplicar em reprocessamento.
 
@@ -355,5 +355,5 @@ Espelha a base existente (Vitest + Testcontainers para Postgres real; sem mocks 
 | 9 RBAC | `PROJETOS_NAMESPACES`, `authorize` nas rotas |
 | 10 Auditoria e eventos | `audit-logger`, `publish`/outbox, `notifier` |
 | 11 Menu agrupado | `Shell.tsx` por módulo |
-| 12 Comentários no projeto | `project_comments`, evento `projetos.projeto.comentario.criado` |
+| 12 Comentários no projeto | `project_comments`, evento `projetos.projeto.comentado` |
 | 13 Central de Configurações | `core.settings`, `settings-service`, `SettingsPage` (admin), consumo nos anexos |

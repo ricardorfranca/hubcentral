@@ -10,6 +10,7 @@
 import { createPool } from "./core/db/pool.js";
 import { buildApp } from "./http/app.js";
 import { startOutboxWorker } from "./core/events/outbox-worker.js";
+import { registerProjetosNotifier } from "./modules/projetos/notifier.js";
 
 /**
  * Inicializa e executa o servidor HUB Central.
@@ -19,6 +20,8 @@ import { startOutboxWorker } from "./core/events/outbox-worker.js";
 async function main(): Promise<void> {
   const pool = createPool();
   const app = buildApp(pool);
+  // Assinantes de eventos (outbox -> notificações in-app).
+  registerProjetosNotifier(pool);
   const worker = startOutboxWorker(pool, { intervalMs: 1000 });
 
   const port = Number(process.env.PORT ?? 3000);

@@ -153,7 +153,7 @@ O módulo segue o **Contrato de Módulos** do HUB Central: possui schema própri
 #### Acceptance Criteria
 
 1. WHEN um Projeto, uma Tarefa, uma Atribuicao, um Comentario de Tarefa, um Comentario de Projeto ou um Anexo é criado, editado, movido ou removido, THE HUB_Central SHALL gravar auditoria imutável em `core.system_logs` com `module = 'projetos'`.
-2. WHEN uma movimentação relevante ocorre, THE HUB_Central SHALL publicar o evento correspondente (`projetos.tarefa.movida`, `projetos.tarefa.atribuida`, `projetos.comentario.criado`, `projetos.projeto.comentario.criado`) via transactional outbox na mesma transação do dado de negócio.
+2. WHEN uma movimentação relevante ocorre, THE HUB_Central SHALL publicar o evento correspondente (`projetos.tarefa.movida`, `projetos.tarefa.atribuida`, `projetos.comentario.criado`, `projetos.projeto.comentado`) via transactional outbox na mesma transação do dado de negócio.
 3. WHEN um evento do Modulo_Projetos é consumido, THE HUB_Central SHALL alimentar a Central_Notificacoes com as Notificacao dos Usuarios envolvidos.
 4. THE Modulo_Projetos SHALL manter seus dados no schema `mod_projetos`, referenciando `core.users` sem duplicar dados de usuário.
 
@@ -177,7 +177,7 @@ O módulo segue o **Contrato de Módulos** do HUB Central: possui schema própri
 1. THE Modulo_Projetos SHALL permitir que um Projeto receba diversos Comentario, cada um com autor (`user_id`), texto e timestamp, persistidos em `mod_projetos.project_comments`.
 2. WHEN um Comentario de Projeto é criado, THE Modulo_Projetos SHALL exigir o namespace `projetos:comentario:criar` do autor.
 3. THE Modulo_Projetos SHALL exibir os Comentario de um Projeto em ordem cronológica.
-4. WHEN um Comentario de Projeto é criado, THE HUB_Central SHALL publicar o evento `projetos.projeto.comentario.criado` via Outbox e gerar uma Notificacao in-app para o Dono_Projeto e para cada Membro_Projeto, exceto o autor do Comentario.
+4. WHEN um Comentario de Projeto é criado, THE HUB_Central SHALL publicar o evento `projetos.projeto.comentado` via Outbox e gerar uma Notificacao in-app para o Dono_Projeto e para cada Membro_Projeto, exceto o autor do Comentario.
 5. WHEN um Comentario de Projeto é criado, THE HUB_Central SHALL gravar auditoria em `core.system_logs` com `module = 'projetos'`.
 
 ### Requirement 13: Central de Configurações do sistema (núcleo)
