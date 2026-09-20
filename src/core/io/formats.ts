@@ -41,7 +41,10 @@ export function toCsv(rows: readonly IoRecord[], columns?: readonly string[]): s
   const cols = columns ?? (rows[0] ? Object.keys(rows[0]) : []);
   const header = cols.map(escapeCsv).join(",");
   const lines = rows.map((r) => cols.map((c) => escapeCsv(r[c] ?? "")).join(","));
-  return [header, ...lines].join("\r\n");
+  // Cada linha (cabeçalho e dados) é terminada por CRLF. Assim, uma linha de
+  // dados composta apenas por campos vazios não se perde no round-trip: ela é
+  // representada por um CRLF a mais, e não por "ausência de conteúdo".
+  return [header, ...lines].map((line) => `${line}\r\n`).join("");
 }
 
 /**
@@ -78,6 +81,10 @@ function parseCsvRows(text: string): string[][] {
   let row: string[] = [];
   let cell = "";
   let inQuotes = false;
+  // Indica que a linha corrente foi iniciada (há pelo menos uma célula em
+  // andamento), mesmo que a célula esteja vazia. Distingue uma "linha final
+  // com um único campo vazio" de "ausência de linha".
+  let started = false;
   for (let i = 0; i < text.length; i++) {
     const ch = text[i]!;
     if (inQuotes) {
@@ -93,21 +100,26 @@ function parseCsvRows(text: string): string[][] {
       }
     } else if (ch === '"') {
       inQuotes = true;
+      started = true;
     } else if (ch === ",") {
       row.push(cell);
       cell = "";
+      started = true;
     } else if (ch === "\n" || ch === "\r") {
       if (ch === "\r" && text[i + 1] === "\n") i++;
       row.push(cell);
       rows.push(row);
       row = [];
       cell = "";
+      started = false;
     } else {
       cell += ch;
+      started = true;
     }
   }
-  // Última célula/linha (se o texto não terminar com quebra).
-  if (cell !== "" || row.length > 0) {
+  // Emite a última linha se ela foi iniciada (inclui a linha final composta
+  // apenas por um campo vazio).
+  if (started || cell !== "" || row.length > 0) {
     row.push(cell);
     rows.push(row);
   }

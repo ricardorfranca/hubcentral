@@ -61,6 +61,20 @@ describe("Formatos de import/export", () => {
       RUNS,
     );
   });
+
+  it("CSV: round-trip de casos de borda (campo vazio, vírgula, aspas, quebra de linha)", () => {
+    const cases: IoRecord[][] = [
+      [{ a: "" }], // única coluna, valor vazio (regressão da flaky test)
+      [{ a: "", b: "" }], // múltiplas colunas vazias
+      [{ nome: "Silva, João", obs: 'ele disse "oi"' }], // vírgula e aspas
+      [{ texto: "linha1\nlinha2" }], // quebra de linha embutida
+      [{ a: "x" }, { a: "" }, { a: "y" }], // linha vazia no meio
+    ];
+    for (const rows of cases) {
+      const cols = Object.keys(rows[0]!);
+      expect(parse("csv", serialize("csv", rows, cols))).toEqual(rows);
+    }
+  });
 });
 
 describe("Import/Export Gateway", () => {

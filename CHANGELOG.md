@@ -2,6 +2,13 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.4.1] - 2026-09-19
+
+### Corrigido
+
+- **Round-trip de CSV**: uma linha de dados composta apenas por campos vazios (ex.: uma única coluna com valor vazio) era perdida ao serializar/parsear CSV. O `toCsv` passou a terminar todas as linhas com CRLF e o parser distingue "linha vazia final" de "ausência de linha". Isso era a causa de uma falha intermitente na suíte de testes de propriedade (import/export). Adicionados testes determinísticos de casos de borda de CSV.
+- **Higiene dos testes de eventos**: os testes do barramento/worker deixaram de depender de um `core.event_outbox` globalmente vazio, verificando apenas as próprias linhas (por id/contact_id).
+
 ## [0.4.0] - 2026-09-19
 
 ### Adicionado

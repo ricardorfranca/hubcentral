@@ -21,14 +21,14 @@ import {
 
 const RUNS = { numRuns: 100 } as const;
 
-beforeEach(async () => {
+beforeEach(() => {
+  // Limpa apenas as assinaturas em memória; NÃO apaga o outbox global (outros
+  // arquivos de teste compartilham a tabela). Cada caso verifica só as próprias
+  // linhas, filtrando por id/contact_id, tornando-se determinístico.
   clearSubscriptions();
-  // Limpa o outbox para isolar as contagens de despacho entre casos.
-  await getTestPool().query(`DELETE FROM core.event_outbox`);
 });
 
 afterAll(async () => {
-  await getTestPool().query(`DELETE FROM core.event_outbox`);
   await closeTestPool();
 });
 
@@ -97,9 +97,13 @@ describe("Barramento de eventos", () => {
       client.release();
     }
 
-    // Exatamente um evento core.contato.atualizado no outbox com o contact_id.
+    // Exatamente um evento core.contato.atualizado PARA ESTE contato (filtra
+    // pelo contact_id único do teste, não pelo nome genérico — determinístico
+    // mesmo que outros testes tenham deixado eventos no outbox compartilhado).
     const { rows } = await pool.query<{ event_name: string; envelope: { payload: { contact_id: string } } }>(
-      `SELECT event_name, envelope FROM core.event_outbox WHERE event_name = 'core.contato.atualizado'`,
+      `SELECT event_name, envelope FROM core.event_outbox
+       WHERE event_name = 'core.contato.atualizado' AND envelope->'payload'->>'contact_id' = $1`,
+      [created],
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]?.envelope.payload.contact_id).toBe(created);
@@ -107,7 +111,9 @@ describe("Barramento de eventos", () => {
     // Despacho entrega ao assinante casado por padrão curinga.
     const received: string[] = [];
     subscribe("core.contato.*", (env) => {
-      received.push(env.event_name);
+      if ((env.payload as { contact_id?: string }).contact_id === created) {
+        received.push(env.event_name);
+      }
     });
     const dispatched = await dispatchPending(pool);
     expect(dispatched).toBeGreaterThanOrEqual(1);
