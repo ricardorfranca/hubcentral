@@ -50,6 +50,6 @@ Plano incremental. Cada tarefa referencia os requisitos que atende. Backend com 
 
 ## Fase 7 — Instalador, documentação e release
 
-- [ ] 7.1 `.env.example`: `UPLOADS_DIR`, `UPLOADS_MAX_BYTES`, `UPLOADS_ALLOWED`. `scripts/install.sh`: criar `UPLOADS_DIR` (dono `hubcentral`); doc de backup inclui o diretório. _Req 7_
-- [ ] 7.2 Docs: README (novo módulo, rotas, central de notificações e de configurações, menu agrupado), `ModuloCRM.md`/novo README do módulo se aplicável, CHANGELOG; nota de reconcessão de RBAC (`projetos:*`, `core:config:gerenciar`) via `reset-admin.sh`. _Req 9, 13_
-- [ ] 7.3 Verificação backend (typecheck + testes + build) e frontend; bump de versão (0.7.0); commit; `gh release create` em `main`; confirmar workflow anexando `frontend-dist.tar.gz`. _Todos_
+- [x] 7.1 `.env.example`: `UPLOADS_DIR`, `UPLOADS_MAX_BYTES`, `UPLOADS_ALLOWED`. `scripts/install.sh`: criar `UPLOADS_DIR` (dono `hubcentral`); doc de backup inclui o diretório. _Req 7_
+- [x] 7.2 Docs: README (novo módulo, rotas, central de notificações e de configurações, menu agrupado), CHANGELOG; nota de reconcessão de RBAC (`projetos:*`, `core:config:gerenciar`) via `reset-admin.sh`. _Req 9, 13_
+- [x] 7.3 Verificação backend (typecheck + testes + build) e frontend; bump de versão (0.7.0); commit; `gh release create` em `main`; confirmar workflow anexando `frontend-dist.tar.gz`. _Todos_

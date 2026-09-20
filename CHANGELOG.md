@@ -2,6 +2,30 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.7.0] - 2026-09-20
+
+### Adicionado — Módulo de Projetos Internos
+
+Novo módulo satélite (`mod_projetos`) para os usuários do sistema (colaboradores internos), com quadro Kanban, comentários e anexos, além de duas capacidades transversais no núcleo.
+
+- **Projetos internos**: criação/edição/arquivamento, com dono e membros referenciando o IAM (`core.users`), descrição curta e um descritivo principal. O acesso é restrito a dono e membros — quem não participa não vê o projeto (nem na listagem, nem no detalhe).
+- **Kanban de tarefas**: três colunas fixas (Não iniciadas, Em execução, Finalizadas). Cartões movidos por arrastar-e-soltar; criação e edição de tarefas.
+- **Atribuição**: tarefas atribuíveis a um ou mais membros do projeto.
+- **Comentários**: no nível da tarefa e no nível do projeto, em ordem cronológica.
+- **Anexos**: arquivos por tarefa, armazenados em disco local do servidor, com nome de armazenamento seguro, validação de tamanho/tipo e download autenticado com verificação de acesso.
+- Permissões RBAC `projetos:*` (bootstrap concede ao SuperAdministrador).
+
+### Adicionado — Núcleo
+
+- **Central de Notificações in-app** (`core.notifications`): serviço genérico reutilizável por qualquer módulo. Sino com contador de não lidas no topo do portal; clicar em uma notificação abre a entidade e a marca como lida. As movimentações em Projetos (mover tarefa, atribuir, comentar) notificam os envolvidos e o dono do projeto. Somente in-app nesta versão.
+- **Central de Configurações** (`core.settings`): parâmetros por módulo, editáveis no portal (Administração → Configurações), agrupados por módulo. Resolução de valor: persistido → default → variável de ambiente. Os limites de anexo do módulo de Projetos são configuráveis por aqui.
+- **Menu lateral agrupado por módulo**: o portal passa a exibir um cabeçalho por módulo (CRM, Projetos Internos, Administração), ocultando seções sem permissão.
+
+### Operação
+
+- Novas variáveis de ambiente `UPLOADS_DIR`, `UPLOADS_MAX_BYTES`, `UPLOADS_ALLOWED` (fallback inicial dos limites de anexo). O instalador cria o diretório de uploads sob `/opt/hubcentral/uploads`; inclua-o na rotina de backup.
+- Novos namespaces (`projetos:*` e `core:config:gerenciar`) são concedidos ao SuperAdministrador ao rodar `scripts/reset-admin.sh`; usuários/perfis existentes precisam de reconcessão.
+
 ## [0.6.0] - 2026-09-20
 
 ### Adicionado — CRM 2.0 (Receita Previsível, B2B)

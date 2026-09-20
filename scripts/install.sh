@@ -225,8 +225,26 @@ ensure_env() {
 # Gerado pelo instalador do HUB Central em $(date -u +%Y-%m-%dT%H:%M:%SZ)
 DATABASE_URL=${db_url}
 PORT=3000
+# Anexos do módulo de Projetos Internos (armazenamento em disco local).
+# Os limites efetivos (tamanho/tipos) são configuráveis na Central de
+# Configurações do portal; estas variáveis são apenas o fallback inicial.
+UPLOADS_DIR=${INSTALL_DIR}/uploads
+UPLOADS_MAX_BYTES=26214400
+UPLOADS_ALLOWED=pdf,png,jpg,jpeg,gif,webp,txt,doc,docx,xls,xlsx,ppt,pptx,zip
 EOF
   chmod 600 "$env_file"
+}
+
+# Cria o diretório de uploads (anexos de tarefas) se ainda não existir. O
+# caminho vem do .env (UPLOADS_DIR) ou usa o default sob o diretório de
+# instalação. Incluído no backup do servidor.
+ensure_uploads_dir() {
+  local uploads_dir="$INSTALL_DIR/uploads"
+  if [ -f "$INSTALL_DIR/.env" ] && grep -q '^UPLOADS_DIR=' "$INSTALL_DIR/.env"; then
+    uploads_dir="$(grep '^UPLOADS_DIR=' "$INSTALL_DIR/.env" | head -1 | cut -d= -f2-)"
+  fi
+  log "Garantindo diretório de uploads em ${uploads_dir}..."
+  mkdir -p "$uploads_dir"
 }
 
 # ----- Build e migrations -----
@@ -459,6 +477,7 @@ main() {
   create_service_user
   fetch_code
   ensure_env
+  ensure_uploads_dir
 
   ensure_swap
   # Garante a limpeza do swap mesmo se um passo abaixo falhar.

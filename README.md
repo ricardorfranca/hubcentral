@@ -41,6 +41,8 @@ HUB Central
 │   ├── Segmentos         — filtros que retornam apenas contact_id
 │   ├── Contrato de módulos — manifesto, referências, eventos, import/export
 │   ├── Auditoria         — core.system_logs imutável
+│   ├── Notificações      — core.notifications in-app (reutilizável por módulos)
+│   ├── Configurações     — core.settings por módulo (Central de Configurações)
 │   └── Eventos           — transactional outbox + pub/sub
 └── mod_crm (módulo satélite) — CRM 2.0 (Receita Previsível, B2B)
     ├── Contas            — empresas (CNPJ) referenciando contatos centrais
@@ -52,6 +54,13 @@ HUB Central
     ├── Mensageria        — canal de equipe + DMs
     ├── Campanhas         — segmentadas por etiquetas
     └── Relatórios        — fechamentos, perdas, performance, SLA
+
+    mod_projetos (módulo satélite) — Projetos Internos
+    ├── Projetos          — dono + membros (core.users), descritivo principal
+    ├── Tarefas (Kanban)  — 3 colunas fixas (não iniciada/em execução/finalizada)
+    ├── Atribuições       — tarefa atribuível a vários membros
+    ├── Comentários       — no nível de tarefa e de projeto
+    └── Anexos            — arquivos por tarefa em disco local
 ```
 
 ## Stack
@@ -173,6 +182,30 @@ Autenticação por Bearer token de sessão (obtido no login). Rotas protegidas e
 | POST | `/api/crm/campaigns/:id/dispatch` | Disparar campanha |
 | GET | `/api/crm/reports/{closings,loss-reasons,performance,sla}` | Relatórios |
 
+### Projetos Internos (`mod_projetos`)
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET/POST | `/api/projetos` | Listar (só os do usuário) / criar projeto |
+| GET/PATCH | `/api/projetos/:id` | Detalhe (membros, comentários) / editar |
+| POST | `/api/projetos/:id/archive` | Arquivar projeto |
+| GET/POST/DELETE | `/api/projetos/:id/members[/:userId]` | Gerenciar membros |
+| POST | `/api/projetos/:id/comments` | Comentar no projeto |
+| GET/POST | `/api/projetos/:id/tasks` | Tarefas (Kanban) / criar |
+| GET/PATCH | `/api/projetos/tasks/:taskId` | Detalhe / editar tarefa |
+| PATCH | `/api/projetos/tasks/:taskId/move` | Mover de coluna |
+| POST/DELETE | `/api/projetos/tasks/:taskId/assignees[/:userId]` | Atribuir/desatribuir |
+| POST | `/api/projetos/tasks/:taskId/comments` | Comentar na tarefa |
+| POST/GET/DELETE | `/api/projetos/tasks/:taskId/attachments`, `/api/projetos/attachments/:id` | Anexos (upload/download/excluir) |
+
+### Núcleo — notificações e configurações
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/notifications[/unread-count]` | Notificações do usuário / contador |
+| POST | `/api/notifications/:id/read`, `/read-all` | Marcar como lida(s) |
+| GET/PATCH | `/api/settings[/:key]` | Central de Configurações (por módulo) |
+
 ## Implantação (Linux)
 
 O HUB Central inclui um instalador para servidores Linux (foco em Debian/Ubuntu; também tenta dnf/yum). O mesmo script **instala** numa máquina nova e **atualiza** uma instalação existente — é idempotente e preserva o `.env`.
@@ -275,7 +308,7 @@ npm run build    # gera frontend/dist (servido pelo nginx em produção)
 npm test         # testes (Vitest + Testing Library)
 ```
 
-Além do CRM, o portal inclui o módulo de **Administração** (gestão de usuários): convite, papéis, ativação/desativação e edição de permissões RBAC por usuário — visível para quem tem `core:usuarios:gerenciar`.
+O portal também inclui o módulo de **Projetos Internos** (quadro Kanban de tarefas com comentários e anexos) e o módulo de **Administração** (gestão de usuários e a **Central de Configurações**): convite, papéis, ativação/desativação, edição de permissões RBAC por usuário e ajuste de parâmetros por módulo — visível para quem tem `core:usuarios:gerenciar`/`core:config:gerenciar`. O menu lateral é **agrupado por módulo**, e um **sino de notificações** no topo mostra as notificações in-app do usuário.
 
 Estrutura: `src/core` (api, auth, branding, rbac, registro de módulos) e `src/modules/<modulo>` (telas de cada módulo). Adicionar um módulo = criar seu `ModuleDefinition` e registrá-lo em `src/core/modules/registry.ts` — o Shell não muda.
 
@@ -298,6 +331,8 @@ Implementado e coberto por testes (property-based + integração):
 - **Contrato de Módulos** — registro por manifesto, referências sem duplicação, RBAC, import/export (CSV/JSON/XLSX), eventos, auditoria imutável, lint de contrato.
 - **IAM** — credenciais (scrypt), papéis, sessões por token, convite com senha temporária, primeiro acesso, cooldown de reenvio.
 - **CRM 2.0 (Receita Previsível, B2B)** — contas (empresas) permanentes referenciando a Base Central; oportunidades efêmeras com MRR + valor único e ARR derivado; pipeline de estágios configuráveis com probabilidade e SLA; atividades (cadência de vendas); forecast ponderado e dashboards; timeline, mensageria, campanhas e relatórios.
+- **Projetos Internos** — projetos com dono e membros (IAM), Kanban de tarefas em 3 colunas fixas, atribuição, comentários (tarefa e projeto) e anexos em disco local; notificações in-app aos envolvidos.
+- **Núcleo — Notificações e Configurações** — Central de Notificações in-app reutilizável por módulos (sino + contador) e Central de Configurações por módulo (persistido → default → env), ambas com auditoria.
 - **Infraestrutura** — API HTTP (Fastify), worker de despacho do outbox.
 
 ### Pendências conhecidas
