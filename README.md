@@ -42,10 +42,13 @@ HUB Central
 │   ├── Contrato de módulos — manifesto, referências, eventos, import/export
 │   ├── Auditoria         — core.system_logs imutável
 │   └── Eventos           — transactional outbox + pub/sub
-└── mod_crm (módulo satélite)
-    ├── Leads             — referenciam contatos centrais
-    ├── Pipeline & SLA    — etapas + SLA com memória entre etapas
-    ├── Timeline          — histórico imutável do lead
+└── mod_crm (módulo satélite) — CRM 2.0 (Receita Previsível, B2B)
+    ├── Contas            — empresas (CNPJ) referenciando contatos centrais
+    ├── Oportunidades     — MRR + valor único, origem/qualificação, ARR derivado
+    ├── Pipeline & SLA    — estágios configuráveis (probabilidade) + SLA
+    ├── Atividades        — cadência de vendas (ligação/e-mail/reunião/tarefa/nota)
+    ├── Forecast          — ponderado, novo MRR/ARR, pipeline por estágio/origem/dono
+    ├── Timeline          — histórico imutável
     ├── Mensageria        — canal de equipe + DMs
     ├── Campanhas         — segmentadas por etiquetas
     └── Relatórios        — fechamentos, perdas, performance, SLA
@@ -149,11 +152,20 @@ Autenticação por Bearer token de sessão (obtido no login). Rotas protegidas e
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| POST | `/api/crm/leads` | Criar lead (find-or-create de contatos) |
-| GET | `/api/crm/leads/:id` | Visão do lead com dados de contato resolvidos |
-| PATCH | `/api/crm/leads/:id/move` | Mover no pipeline (aplica SLA) |
-| PATCH | `/api/crm/leads/:id/finalize` | Ganho/perdido |
-| GET | `/api/crm/leads/:id/timeline` | Timeline do lead |
+| GET/POST | `/api/crm/accounts` | Listar/criar contas (empresa via CNPJ) |
+| GET | `/api/crm/accounts/:id` | Conta com contatos vinculados |
+| POST | `/api/crm/accounts/:id/contacts` | Vincular contato (pessoa) à conta |
+| GET/POST | `/api/crm/opportunities` | Listar (com filtros)/criar oportunidades |
+| GET | `/api/crm/opportunities/:id` | Detalhe da oportunidade (MRR/ARR) |
+| PATCH | `/api/crm/opportunities/:id/stage` | Mover de estágio |
+| PATCH | `/api/crm/opportunities/:id/finalize` | Ganho (com valores) / perdido (com motivo) |
+| GET/PATCH | `/api/crm/stages[/:id]` | Estágios do pipeline (probabilidade) |
+| GET | `/api/crm/forecast` | Forecast ponderado e agregados de Receita Previsível |
+| GET/POST | `/api/crm/activities[/mine]` | Atividades (agenda pessoal) |
+| POST | `/api/crm/activities/:id/complete` | Concluir atividade |
+| GET | `/api/crm/opportunities/:id/activities` | Atividades da oportunidade |
+| GET | `/api/crm/conversations` | Conversas do usuário (não lidas) |
+| POST | `/api/crm/conversations/:id/read` | Marcar conversa como lida |
 | GET/POST | `/api/crm/lists/:type` | Listas configuráveis |
 | GET/PUT | `/api/crm/sla/:columnId` | SLA por etapa |
 | GET/POST | `/api/crm/messages[/:conversationId]` | Mensageria interna |
@@ -253,7 +265,7 @@ systemctl restart hubcentral     # reiniciar
 
 ## Frontend
 
-O portal web é uma SPA em **React + TypeScript + Vite + Material UI**, em `frontend/`. É uma base consolidada e extensível: cada módulo registra suas telas, menus e permissões de forma declarativa (`ModuleDefinition`), do mesmo modo que o backend usa o Contrato de Módulos. Inclui autenticação (login e primeiro acesso), tema white-label e o módulo CRM completo: **pipeline Kanban**, **campanhas**, **relatórios**, **conversas** e **configurações** (listas e SLA por etapa).
+O portal web é uma SPA em **React + TypeScript + Vite + Material UI**, em `frontend/`. É uma base consolidada e extensível: cada módulo registra suas telas, menus e permissões de forma declarativa (`ModuleDefinition`), do mesmo modo que o backend usa o Contrato de Módulos. Inclui autenticação (login e primeiro acesso), tema white-label e o módulo CRM 2.0 completo (Receita Previsível): **oportunidades** (Kanban por estágio + detalhe com MRR/ARR e finalização), **contas**, **atividades**, **dashboards de Receita Previsível**, **conversas**, **campanhas**, **relatórios** e **configurações** (listas e SLA por estágio).
 
 ```bash
 cd frontend
@@ -285,7 +297,7 @@ Implementado e coberto por testes (property-based + integração):
 - **Base Central de Contatos** — contatos, deduplicação, vínculos empresa↔pessoa, categorias, campos personalizados, mesclagem, segmentação, proteção de exclusão.
 - **Contrato de Módulos** — registro por manifesto, referências sem duplicação, RBAC, import/export (CSV/JSON/XLSX), eventos, auditoria imutável, lint de contrato.
 - **IAM** — credenciais (scrypt), papéis, sessões por token, convite com senha temporária, primeiro acesso, cooldown de reenvio.
-- **CRM** — leads referenciando contatos, pipeline com SLA (memória entre etapas), timeline, mensageria, campanhas, relatórios.
+- **CRM 2.0 (Receita Previsível, B2B)** — contas (empresas) permanentes referenciando a Base Central; oportunidades efêmeras com MRR + valor único e ARR derivado; pipeline de estágios configuráveis com probabilidade e SLA; atividades (cadência de vendas); forecast ponderado e dashboards; timeline, mensageria, campanhas e relatórios.
 - **Infraestrutura** — API HTTP (Fastify), worker de despacho do outbox.
 
 ### Pendências conhecidas

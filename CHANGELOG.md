@@ -2,6 +2,24 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.6.0] - 2026-09-20
+
+### Adicionado — CRM 2.0 (Receita Previsível, B2B)
+
+Reformulação do CRM para o modelo de **Receita Previsível**, com foco em vendas B2B recorrentes. A conta (empresa) é permanente — a fonte de verdade é a Base Central de Contatos (`core.contacts`) — enquanto a oportunidade é efêmera e repetível ao longo do relacionamento.
+
+- **Contas (empresas)**: cadastro a partir de razão social + CNPJ, com segmento e porte. Vinculam contatos (pessoas) da Base Central e acumulam o histórico de oportunidades. Novas permissões `crm:contas:visualizar|criar|editar`.
+- **Oportunidades**: separadas do conceito de lead. Toda oportunidade pertence a uma conta e captura **MRR (recorrente)** + **valor único (setup)**; o ARR é derivado (`MRR × 12`). Origem (inbound/outbound/indicação), qualificação (frio/morno/quente) e estágio configurável. Kanban por estágio com mover por arrastar, detalhe com finalização (ganho exige valores; perdido exige motivo). Permissões `crm:oportunidades:visualizar|criar|editar|mover|finalizar`.
+- **Pipeline configurável**: estágios persistidos no banco (novo, qualificação, descoberta, proposta, negociação, ganho, perdido) com probabilidade por estágio, editáveis.
+- **Atividades (cadência de vendas)**: ligações, e-mails, reuniões, tarefas e notas, com prazo e conclusão, vinculadas a oportunidade/conta/contato. Agenda pessoal do usuário. Permissões `crm:atividades:visualizar|gerenciar`.
+- **Dashboards de Receita Previsível**: forecast ponderado (Σ do valor anualizado × probabilidade), novo MRR/ARR do período, e pipeline por estágio, origem e responsável. Permissão `crm:forecast:visualizar`.
+- **Conversas**: tela reescrita para listar as conversas do usuário (equipe + DMs) com contagem de não lidas e marcação de leitura ao abrir.
+
+### Alterado
+
+- Migração dos leads existentes para o novo modelo de oportunidades/contas, preservando o histórico.
+- Telas antigas baseadas em lead (Kanban, detalhe, criação) substituídas pelas telas de oportunidade/conta. Configurações de SLA passam a usar os estágios reais do pipeline.
+
 ## [0.5.1] - 2026-09-20
 
 ### Corrigido
