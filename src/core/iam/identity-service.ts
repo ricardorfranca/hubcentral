@@ -28,10 +28,12 @@ export interface IamUser {
   role: UserRole;
   status: "active" | "disabled";
   password_set: boolean;
+  /** Ramal do usuário no PABX (discagem via curl). */
+  extension: string | null;
 }
 
 /** Colunas seguras de usuário (sem password_hash). */
-const USER_COLUMNS = "id, email, full_name, role, status, password_set";
+const USER_COLUMNS = "id, email, full_name, role, status, password_set, extension";
 
 /**
  * Busca um usuário por id (dados seguros, sem hash).
@@ -116,6 +118,36 @@ export async function setUserStatus(
     action: "IAM_STATUS_ALTERADO",
     payloadBefore: { status: before.status },
     payloadAfter: { status },
+  });
+}
+
+/**
+ * Define (ou limpa) o ramal do usuário no PABX. Auditado.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param userId - `user_id` alvo.
+ * @param extension - Ramal (string) ou `null` para remover.
+ * @param actorUserId - Autor da alteração.
+ * @throws {DomainError} `IAM_USER_NOT_FOUND` se o usuário não existe.
+ */
+export async function setUserExtension(
+  client: PoolClient,
+  userId: string,
+  extension: string | null,
+  actorUserId: string | null = null,
+): Promise<void> {
+  const before = await getUserById(client, userId);
+  if (!before) {
+    throw new DomainError(ErrorCode.IAM_USER_NOT_FOUND, "Usuário não encontrado.", { user_id: userId });
+  }
+  const value = extension && extension.trim() !== "" ? extension.trim() : null;
+  await client.query(`UPDATE core.users SET extension = $2 WHERE id = $1`, [userId, value]);
+  await auditLog(client, {
+    userId: actorUserId,
+    module: "core",
+    action: "IAM_RAMAL_ALTERADO",
+    payloadBefore: { extension: before.extension },
+    payloadAfter: { extension: value },
   });
 }
 
@@ -253,8 +285,9 @@ export async function authenticate(
     status: "active" | "disabled";
     password_set: boolean;
     password_hash: string | null;
+    extension: string | null;
   }>(
-    `SELECT id, email, full_name, role, status, password_set, password_hash
+    `SELECT id, email, full_name, role, status, password_set, password_hash, extension
      FROM core.users WHERE email = $1`,
     [email],
   );
@@ -272,5 +305,6 @@ export async function authenticate(
     role: user.role,
     status: user.status,
     password_set: user.password_set,
+    extension: user.extension,
   };
 }

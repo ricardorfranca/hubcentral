@@ -13,7 +13,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Typography, Button, Card, CardContent, Stack, Chip, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, Alert, CircularProgress, ToggleButton,
-  ToggleButtonGroup, MenuItem, Divider,
+  ToggleButtonGroup, MenuItem, Divider, FormControlLabel, Switch,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import SendIcon from "@mui/icons-material/Send";
@@ -21,8 +21,28 @@ import EditIcon from "@mui/icons-material/Edit";
 import {
   listCampaigns, createCampaign, updateCampaign, dispatchCampaign, listCrmItems,
 } from "../../core/api/crm-extra.js";
+import { listCustomFieldDefs } from "../../core/api/contacts.js";
 import { ApiError } from "../../core/api/client.js";
 import type { Campaign } from "../../core/api/types.js";
+
+/** Variáveis fixas disponíveis para personalização (token + rótulo). */
+const TEMPLATE_VARS: { token: string; label: string }[] = [
+  { token: "nome_lead", label: "Nome do contato" },
+  { token: "primeiro_nome", label: "Primeiro nome" },
+  { token: "empresa_lead", label: "Empresa" },
+  { token: "email_lead", label: "E-mail" },
+  { token: "telefone_lead", label: "Telefone" },
+  { token: "vendedor", label: "Vendedor" },
+  { token: "produto", label: "Produto" },
+];
+
+/** Converte um ISO (ou null) para o formato de `<input type="datetime-local">`. */
+function toLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 const CHANNELS = [
   { id: "email" as const, label: "Email" },
@@ -126,6 +146,12 @@ function CampaignEditor({
   const [body, setBody] = useState(campaign?.body_text ?? "");
   const [bodyHtml, setBodyHtml] = useState(campaign?.body_html ?? "");
 
+  // Agendamento e throttling.
+  const [autoDispatch, setAutoDispatch] = useState(campaign?.auto_dispatch ?? false);
+  const [scheduledAt, setScheduledAt] = useState(toLocalInput(campaign?.scheduled_at ?? null));
+  const [batchSize, setBatchSize] = useState(String(campaign?.batch_size ?? 50));
+  const [perHour, setPerHour] = useState(campaign?.per_hour != null ? String(campaign.per_hour) : "");
+
   useEffect(() => { /* mantém o editor controlado pela campanha selecionada */ }, [campaign]);
 
   const save = useMutation({
@@ -135,6 +161,10 @@ function CampaignEditor({
         body_type: bodyType,
         body_text: bodyType === "text" ? body : undefined,
         body_html: bodyType === "html" ? bodyHtml : undefined,
+        auto_dispatch: autoDispatch,
+        scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
+        batch_size: Number(batchSize) || 50,
+        per_hour: perHour.trim() === "" ? null : Number(perHour),
       };
       return campaign
         ? updateCampaign(campaign.id, { ...payload, status })
@@ -143,6 +173,13 @@ function CampaignEditor({
     onSuccess: onSaved,
     onError: (e) => onError(e instanceof ApiError ? e.message : "Falha ao salvar campanha."),
   });
+
+  /** Insere uma variável no fim do corpo ativo. */
+  function insertVar(token: string): void {
+    const chunk = `{{${token}}}`;
+    if (bodyType === "html" && channels.includes("email")) setBodyHtml((v) => `${v}${chunk}`);
+    else setBody((v) => `${v}${chunk}`);
+  }
 
   function toggleTag(tag: string): void {
     setTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
@@ -191,9 +228,60 @@ function CampaignEditor({
             </Stack>
           </Box>
 
+          <Divider />
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Agendamento e ritmo de disparo</Typography>
+            <FormControlLabel
+              control={<Switch checked={autoDispatch} onChange={(e) => setAutoDispatch(e.target.checked)} />}
+              label="Disparar automaticamente após o cadastro"
+            />
+            <Stack direction="row" spacing={2} sx={{ mt: 1 }} flexWrap="wrap" useFlexGap>
+              <TextField
+                type="datetime-local"
+                size="small"
+                label="Iniciar em (opcional)"
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                disabled={!autoDispatch}
+                sx={{ width: 220 }}
+                helperText="Em branco = imediato"
+              />
+              <TextField
+                type="number"
+                size="small"
+                label="Mensagens por vez"
+                value={batchSize}
+                onChange={(e) => setBatchSize(e.target.value)}
+                disabled={!autoDispatch}
+                sx={{ width: 160 }}
+                inputProps={{ min: 1 }}
+              />
+              <TextField
+                type="number"
+                size="small"
+                label="Máx. por hora"
+                value={perHour}
+                onChange={(e) => setPerHour(e.target.value)}
+                disabled={!autoDispatch}
+                sx={{ width: 160 }}
+                inputProps={{ min: 1 }}
+                helperText="Em branco = sem limite"
+              />
+            </Stack>
+          </Box>
+
           {channels.includes("email") && (
             <>
-              <TextField label="Assunto do email" value={subject} onChange={(e) => setSubject(e.target.value)} fullWidth />
+              <Box>
+                <TextField label="Assunto do email" value={subject} onChange={(e) => setSubject(e.target.value)} fullWidth />
+                <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ alignSelf: "center", mr: 0.5 }}>Inserir no assunto:</Typography>
+                  {TEMPLATE_VARS.map((v) => (
+                    <Chip key={v.token} size="small" variant="outlined" label={v.label} onClick={() => setSubject((s) => `${s}{{${v.token}}}`)} />
+                  ))}
+                </Stack>
+              </Box>
               <Box>
                 <Typography variant="subtitle2" gutterBottom>Formato do conteúdo do email</Typography>
                 <ToggleButtonGroup exclusive value={bodyType} onChange={(_e, v) => v && setBodyType(v)}>
@@ -209,12 +297,14 @@ function CampaignEditor({
             <Typography variant="subtitle2" gutterBottom>
               {bodyType === "html" && channels.includes("email") ? "Corpo do email (HTML)" : "Corpo da mensagem"}
             </Typography>
+            <VariablePalette onInsert={insertVar} />
             <TextField
               multiline minRows={5} fullWidth
               value={bodyType === "html" && channels.includes("email") ? bodyHtml : body}
               onChange={(e) => (bodyType === "html" && channels.includes("email") ? setBodyHtml(e.target.value) : setBody(e.target.value))}
               placeholder="Olá {{nome_lead}}, ..."
-              helperText="Variáveis disponíveis: {{nome_lead}}, {{empresa_lead}}, {{vendedor}}, {{produto}}"
+              helperText="Clique nas variáveis acima para inseri-las. Os valores são preenchidos por contato no disparo."
+              sx={{ mt: 1 }}
             />
           </Box>
         </Stack>
@@ -226,5 +316,26 @@ function CampaignEditor({
         </Button>
       </DialogActions>
     </Dialog>
+  );
+}
+
+/**
+ * Paleta de variáveis para inserção no corpo da mensagem. Mostra as variáveis
+ * fixas do contato/lead e, dinamicamente, os campos personalizados cadastrados
+ * (como `{{campo_<nome>}}`).
+ */
+function VariablePalette({ onInsert }: { onInsert: (token: string) => void }): JSX.Element {
+  const { data: defs } = useQuery({ queryKey: ["custom-fields"], queryFn: listCustomFieldDefs });
+
+  return (
+    <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+      <Typography variant="caption" color="text.secondary" sx={{ alignSelf: "center", mr: 0.5 }}>Variáveis:</Typography>
+      {TEMPLATE_VARS.map((v) => (
+        <Chip key={v.token} size="small" label={v.label} onClick={() => onInsert(v.token)} />
+      ))}
+      {(defs ?? []).map((d) => (
+        <Chip key={d.id} size="small" variant="outlined" label={d.name} onClick={() => onInsert(`campo_${d.name}`)} />
+      ))}
+    </Stack>
   );
 }

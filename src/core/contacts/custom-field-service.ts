@@ -69,6 +69,78 @@ export function isValueOfType(dataType: CustomFieldDataType, value: unknown): bo
 }
 
 /**
+ * Lista todas as definições de campos personalizados, ordenadas por nome.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @returns As definições cadastradas.
+ */
+export async function listCustomFieldDefs(client: PoolClient): Promise<CustomFieldDef[]> {
+  const { rows } = await client.query<CustomFieldDef>(
+    `SELECT id, name, data_type, created_at FROM core.custom_field_defs ORDER BY name`,
+  );
+  return rows;
+}
+
+/**
+ * Remove uma definição de campo personalizado (e, em cascata, seus valores).
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param fieldId - `id` da definição.
+ */
+export async function deleteCustomFieldDef(client: PoolClient, fieldId: string): Promise<void> {
+  await client.query(`DELETE FROM core.custom_field_defs WHERE id = $1`, [fieldId]);
+}
+
+/** Valor de um campo personalizado de um contato (com metadados da definição). */
+export interface CustomFieldValue {
+  field_id: string;
+  name: string;
+  data_type: CustomFieldDataType;
+  value: unknown;
+}
+
+/**
+ * Lista os valores de campos personalizados de um contato, já com o nome e o
+ * tipo da definição (para renderização na UI).
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param contactId - `contact_id`.
+ * @returns Os valores do contato.
+ */
+export async function listContactCustomFieldValues(
+  client: PoolClient,
+  contactId: string,
+): Promise<CustomFieldValue[]> {
+  const { rows } = await client.query<CustomFieldValue>(
+    `SELECT d.id AS field_id, d.name, d.data_type, v.value
+     FROM core.contact_custom_field_values v
+     JOIN core.custom_field_defs d ON d.id = v.field_id
+     WHERE v.contact_id = $1
+     ORDER BY d.name`,
+    [contactId],
+  );
+  return rows;
+}
+
+/**
+ * Remove o valor de um campo personalizado de um contato.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param contactId - `contact_id`.
+ * @param fieldId - `id` da definição.
+ */
+export async function clearCustomFieldValue(
+  client: PoolClient,
+  contactId: string,
+  fieldId: string,
+): Promise<void> {
+  await client.query(
+    `DELETE FROM core.contact_custom_field_values WHERE contact_id = $1 AND field_id = $2`,
+    [contactId, fieldId],
+  );
+}
+
+/**
  * Define um campo personalizado tipado (Req 4.1). Nome único case-insensitive.
  *
  * @param client - Cliente PostgreSQL.

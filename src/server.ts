@@ -10,6 +10,7 @@
 import { createPool } from "./core/db/pool.js";
 import { buildApp } from "./http/app.js";
 import { startOutboxWorker } from "./core/events/outbox-worker.js";
+import { startCampaignWorker } from "./modules/crm/campaign-worker.js";
 import { registerProjetosNotifier } from "./modules/projetos/notifier.js";
 
 /**
@@ -23,12 +24,15 @@ async function main(): Promise<void> {
   // Assinantes de eventos (outbox -> notificações in-app).
   registerProjetosNotifier(pool);
   const worker = startOutboxWorker(pool, { intervalMs: 1000 });
+  // Worker de disparo automático de campanhas (agendamento + throttling).
+  const campaignWorker = startCampaignWorker(pool, { intervalMs: 15000 });
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen({ port, host: "0.0.0.0" });
 
   const shutdown = async (): Promise<void> => {
     worker.stop();
+    campaignWorker.stop();
     await app.close();
     await pool.end();
     process.exit(0);

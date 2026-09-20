@@ -145,6 +145,14 @@ export const ErrorCode = {
   SMS_NOT_CONFIGURED: "SMS_NOT_CONFIGURED",
   /** Falha ao enviar SMS pelo gateway. */
   SMS_ERROR: "SMS_ERROR",
+  /** WhatsApp/Evolution não configurado (URL/instância/API key ausentes). */
+  WHATSAPP_NOT_CONFIGURED: "WHATSAPP_NOT_CONFIGURED",
+  /** Falha ao enviar mensagem via Evolution API. */
+  WHATSAPP_ERROR: "WHATSAPP_ERROR",
+  /** Discagem por PABX não configurada (template de curl ausente/desabilitado). */
+  TELEPHONY_NOT_CONFIGURED: "TELEPHONY_NOT_CONFIGURED",
+  /** Falha ao solicitar a chamada ao PABX remoto. */
+  TELEPHONY_ERROR: "TELEPHONY_ERROR",
   /** Acesso negado a um projeto do qual o usuário não participa (Projetos). */
   PROJ_ACCESS_DENIED: "PROJ_ACCESS_DENIED",
   /** Projeto não encontrado. */

@@ -11,6 +11,10 @@
 import type { PoolClient } from "pg";
 import { DomainError, ErrorCode } from "../../core/errors.js";
 import { log as auditLog } from "../../core/audit/audit-logger.js";
+import { isSuperadmin } from "../../core/iam/rbac.js";
+
+// Reexporta o helper do núcleo IAM para os consumidores do módulo (ex.: rotas).
+export { isSuperadmin };
 
 /** Projeto como persistido em `mod_projetos.projects`. */
 export interface Project {
@@ -100,28 +104,14 @@ export async function isSuperadminOrOwner(
   projectId: string,
 ): Promise<boolean> {
   if (!userId) return false;
+  // Reutiliza o helper do núcleo IAM para a checagem de papel; mantém a mesma
+  // semântica observável: superadmin OU dono do projeto.
+  if (await isSuperadmin(client, userId)) return true;
   const { rows } = await client.query<{ ok: boolean }>(
-    `SELECT (
-       EXISTS (SELECT 1 FROM core.users WHERE id = $1 AND role = 'superadmin')
-       OR EXISTS (SELECT 1 FROM mod_projetos.projects WHERE id = $2 AND owner_user_id = $1)
+    `SELECT EXISTS (
+       SELECT 1 FROM mod_projetos.projects WHERE id = $2 AND owner_user_id = $1
      ) AS ok`,
     [userId, projectId],
-  );
-  return rows[0]?.ok ?? false;
-}
-
-/**
- * Indica se o usuário é SuperAdministrador (para o dashboard global).
- *
- * @param client - Cliente PostgreSQL.
- * @param userId - `user_id` autenticado.
- * @returns `true` se superadmin.
- */
-export async function isSuperadmin(client: PoolClient, userId: string | null): Promise<boolean> {
-  if (!userId) return false;
-  const { rows } = await client.query<{ ok: boolean }>(
-    `SELECT EXISTS (SELECT 1 FROM core.users WHERE id = $1 AND role = 'superadmin') AS ok`,
-    [userId],
   );
   return rows[0]?.ok ?? false;
 }

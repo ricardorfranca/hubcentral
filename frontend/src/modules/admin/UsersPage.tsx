@@ -11,13 +11,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody, Chip,
   Select, MenuItem, Stack, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  Alert, CircularProgress, IconButton, Tooltip,
+  Alert, CircularProgress, IconButton, Tooltip, FormControlLabel, Switch,
 } from "@mui/material";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import SecurityIcon from "@mui/icons-material/Security";
 import ReplayIcon from "@mui/icons-material/Replay";
 import KeyIcon from "@mui/icons-material/Key";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import { listUsers, inviteUser, updateUser, resendInvite, setUserPassword, type AdminUser } from "../../core/api/iam.js";
+import { getUserChannel, saveUserChannel, type UserChannel } from "../../core/api/comms.js";
 import { ApiError } from "../../core/api/client.js";
 import type { UserRole } from "../../core/api/types.js";
 import { PermissionsDialog } from "./PermissionsDialog.js";
@@ -35,6 +37,7 @@ export function UsersPage(): JSX.Element {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [permUser, setPermUser] = useState<AdminUser | null>(null);
   const [pwdUser, setPwdUser] = useState<AdminUser | null>(null);
+  const [chanUser, setChanUser] = useState<AdminUser | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["iam", "users"] });
@@ -70,7 +73,7 @@ export function UsersPage(): JSX.Element {
         <TableHead>
           <TableRow>
             <TableCell>E-mail</TableCell><TableCell>Nome</TableCell><TableCell>Papel</TableCell>
-            <TableCell>Status</TableCell><TableCell align="right">Ações</TableCell>
+            <TableCell>Ramal</TableCell><TableCell>Status</TableCell><TableCell align="right">Ações</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -88,6 +91,9 @@ export function UsersPage(): JSX.Element {
                 </Select>
               </TableCell>
               <TableCell>
+                <ExtensionCell user={u} onSaved={invalidate} onError={setError} />
+              </TableCell>
+              <TableCell>
                 <Chip
                   label={u.status === "active" ? "ativo" : "desabilitado"}
                   color={u.status === "active" ? "success" : "default"}
@@ -101,6 +107,9 @@ export function UsersPage(): JSX.Element {
                     <IconButton size="small" onClick={() => resend.mutate(u.id)}><ReplayIcon fontSize="small" /></IconButton>
                   </Tooltip>
                 )}
+                <Tooltip title="Canal de WhatsApp (Evolution API)">
+                  <IconButton size="small" onClick={() => setChanUser(u)}><WhatsAppIcon fontSize="small" /></IconButton>
+                </Tooltip>
                 <Tooltip title="Definir senha">
                   <IconButton size="small" onClick={() => setPwdUser(u)}><KeyIcon fontSize="small" /></IconButton>
                 </Tooltip>
@@ -116,7 +125,121 @@ export function UsersPage(): JSX.Element {
       <InviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} onDone={invalidate} onError={setError} />
       {permUser && <PermissionsDialog user={permUser} onClose={() => setPermUser(null)} />}
       {pwdUser && <PasswordDialog user={pwdUser} onClose={() => setPwdUser(null)} onError={setError} />}
+      {chanUser && <WhatsappChannelDialog user={chanUser} onClose={() => setChanUser(null)} onError={setError} />}
     </Box>
+  );
+}
+
+/** Célula de edição inline do ramal do usuário no PABX. */
+function ExtensionCell({
+  user, onSaved, onError,
+}: {
+  user: AdminUser; onSaved: () => void; onError: (m: string) => void;
+}): JSX.Element {
+  const [value, setValue] = useState(user.extension ?? "");
+  const save = useMutation({
+    mutationFn: (ext: string) => updateUser(user.id, { extension: ext.trim() === "" ? null : ext.trim() }),
+    onSuccess: onSaved,
+    onError: (e) => onError(e instanceof ApiError ? e.message : "Falha ao salvar ramal."),
+  });
+  const dirty = (value ?? "") !== (user.extension ?? "");
+
+  return (
+    <TextField
+      size="small"
+      placeholder="—"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => { if (dirty) save.mutate(value); }}
+      sx={{ width: 90 }}
+      inputProps={{ "aria-label": `Ramal de ${user.full_name}` }}
+    />
+  );
+}
+
+/**
+ * Diálogo de configuração do canal de WhatsApp (Evolution API) de um usuário.
+ * O superadministrador pode inserir/editar as credenciais de qualquer usuário.
+ * A API key só é enviada quando alterada (o backend não a devolve por segurança).
+ */
+function WhatsappChannelDialog({
+  user, onClose, onError,
+}: {
+  user: AdminUser; onClose: () => void; onError: (m: string) => void;
+}): JSX.Element {
+  const { data, isLoading } = useQuery<UserChannel>({
+    queryKey: ["iam", "channel", user.id],
+    queryFn: () => getUserChannel(user.id),
+  });
+  const [url, setUrl] = useState("");
+  const [instance, setInstance] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [enabled, setEnabled] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  if (data && !hydrated) {
+    setUrl(data.wa_evolution_url ?? "");
+    setInstance(data.wa_instance ?? "");
+    setEnabled(data.wa_enabled);
+    setHydrated(true);
+  }
+
+  const save = useMutation({
+    mutationFn: () => saveUserChannel(user.id, {
+      wa_evolution_url: url.trim() === "" ? null : url.trim(),
+      wa_instance: instance.trim() === "" ? null : instance.trim(),
+      // Só envia a API key se o admin digitou uma nova.
+      ...(apiKey.trim() !== "" ? { wa_api_key: apiKey.trim() } : {}),
+      wa_enabled: enabled,
+    }),
+    onSuccess: onClose,
+    onError: (e) => onError(e instanceof ApiError ? e.message : "Falha ao salvar canal."),
+  });
+
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle>Canal de WhatsApp — {user.full_name}</DialogTitle>
+      <DialogContent>
+        {isLoading ? (
+          <Box sx={{ display: "grid", placeItems: "center", height: 120 }}><CircularProgress /></Box>
+        ) : (
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Alert severity="info">
+              Deixe URL e API key em branco para usar os valores globais (fallback) definidos em Configurações.
+            </Alert>
+            <TextField
+              label="Evolution API — URL base"
+              placeholder="https://evo.suaempresa.com"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+            />
+            <TextField
+              label="Instância / sessão"
+              placeholder="nome-da-instancia"
+              value={instance}
+              onChange={(e) => setInstance(e.target.value)}
+            />
+            <TextField
+              label={data?.wa_api_key_set ? "API key (deixe em branco para manter)" : "API key"}
+              type="password"
+              autoComplete="new-password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+            />
+            <FormControlLabel
+              control={<Switch checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />}
+              label={enabled ? "Canal habilitado" : "Canal desabilitado"}
+            />
+          </Stack>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancelar</Button>
+        <Button variant="contained" onClick={() => save.mutate()} disabled={save.isPending || isLoading}>
+          {save.isPending ? "Salvando…" : "Salvar"}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 

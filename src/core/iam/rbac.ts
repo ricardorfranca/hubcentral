@@ -111,8 +111,36 @@ export async function hasNamespace(
 }
 
 /**
+ * Indica se um usuário tem o papel `superadmin` (§2.2 das Instruções gerais).
+ *
+ * Consolida no núcleo IAM a verificação de papel usada como bypass de acesso
+ * global em {@link authorize}. Retorna `false` para `userId` nulo, preservando
+ * a precedência da checagem de autenticação.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param userId - `user_id` autenticado, ou `null` se não autenticado.
+ * @returns `true` se o usuário existe e possui `role = 'superadmin'`.
+ */
+export async function isSuperadmin(
+  client: PoolClient,
+  userId: string | null,
+): Promise<boolean> {
+  if (!userId) return false;
+  const { rows } = await client.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM core.users WHERE id = $1 AND role = 'superadmin'
+     ) AS exists`,
+    [userId],
+  );
+  return rows[0]?.exists ?? false;
+}
+
+/**
  * Autoriza uma ação exigindo que o usuário possua o namespace (Req 10.3, 10.4).
  * Lança se o usuário não estiver autenticado ou não possuir o namespace.
+ *
+ * SuperAdministradores (`role = 'superadmin'`) têm acesso global e são
+ * autorizados incondicionalmente, sem depender de `hasNamespace` (§2.2).
  *
  * @param client - Cliente PostgreSQL.
  * @param userId - `user_id` autenticado, ou `null` se não autenticado.
@@ -130,6 +158,7 @@ export async function authorize(
       required_namespace: namespace,
     });
   }
+  if (await isSuperadmin(client, userId)) return;
   if (!(await hasNamespace(client, userId, namespace))) {
     throw new DomainError(ErrorCode.RBAC_ACCESS_DENIED, "Acesso negado.", {
       required_namespace: namespace,

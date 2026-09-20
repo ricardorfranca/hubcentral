@@ -82,7 +82,14 @@ export function OpportunitiesBoard(): JSX.Element {
             <Paper
               key={stage.id}
               variant="outlined"
-              sx={{ minWidth: 280, width: 280, p: 1, bgcolor: "grey.50" }}
+              sx={{
+                minWidth: 280,
+                width: 280,
+                p: 1,
+                // Fundo sensível ao modo: claro no light, escuro no dark, para
+                // que o texto (text.primary/secondary) permaneça legível.
+                bgcolor: (theme) => (theme.palette.mode === "dark" ? "grey.900" : "grey.50"),
+              }}
               onDragOver={(e) => canMove && e.preventDefault()}
               onDrop={(e) => onDrop(stage.id, e)}
             >

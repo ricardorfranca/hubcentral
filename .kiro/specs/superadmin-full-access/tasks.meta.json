@@ -1,0 +1,142 @@
+{
+  "pbtResults": {
+    "1. Escrever teste exploratório da Bug Condition (ANTES de corrigir)": {
+      "status": "passed",
+      "failingExample": "Property failed after 1 tests. Counterexample: [\"a:a:a\"] (shrunk 6x). Got error: promise rejected \"DomainError: Acesso negado.\" (code RBAC_ACCESS_DENIED) instead of resolving — authorize(client, superadminId, \"a:a:a\") lança RBAC_ACCESS_DENIED em vez de resolver. Casos concretos também falharam: authorize(client, superadminId, \"crm:novomodulo:acao\") → RBAC_ACCESS_DENIED; authorize(client, superadminId, \"core:backup:gerenciar\") → RBAC_ACCESS_DENIED. Esta FALHA é o SUCESSO da tarefa de exploração — confirma que o bug existe (authorize não possui bypass para role='superadmin').",
+      "lastRunTimestamp": 1789931009310
+    },
+    "3.3 Verificar que o teste exploratório da Bug Condition agora passa": {
+      "status": "passed",
+      "lastRunTimestamp": 1789931371787
+    },
+    "3.4 Verificar que os testes de preservação continuam passando": {
+      "status": "passed",
+      "lastRunTimestamp": 1789931372546
+    }
+  },
+  "executionHistory": {
+    "1. Escrever teste exploratório da Bug Condition (ANTES de corrigir)": [
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789930909280
+      },
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789930918056
+      },
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789931029436
+      }
+    ],
+    "2. Escrever testes de preservação property-based (ANTES de corrigir)": [
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789930909316
+      },
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789931033057
+      },
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789931144058
+      }
+    ],
+    "3.1 Adicionar/promover o helper `isSuperadmin` ao núcleo IAM e inserir o bypass em `authorize`": [
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789930909371
+      },
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789931147770
+      },
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789931215617
+      }
+    ],
+    "3.2 Refatorar (opcional, não regressivo) `project-service.ts` para reusar o helper do núcleo": [
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789930909390
+      },
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789931219166
+      },
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789931328362
+      }
+    ],
+    "3.3 Verificar que o teste exploratório da Bug Condition agora passa": [
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789930909414
+      },
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789931331892
+      },
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789931388319
+      }
+    ],
+    "3.4 Verificar que os testes de preservação continuam passando": [
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789930909460
+      },
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789931391608
+      }
+    ],
+    "4. Testes unitários e de integração complementares": [
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789930909479
+      },
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789931395456
+      }
+    ],
+    "5. Checkpoint - Garantir que todos os testes passam": [
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789930909497
+      }
+    ],
+    "3. Correção para o acesso global do SuperAdministrador": [
+      {
+        "executionId": "1a232e9c-c74f-460f-9363-a5bbafcb920a",
+        "chatSessionId": "sess_adc5a164-60df-4cd9-a197-99bcda31d6f8",
+        "timestamp": 1789931391655
+      }
+    ]
+  }
+}

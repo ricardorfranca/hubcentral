@@ -106,3 +106,54 @@ export function assignLabel(contactId: string, categoryId: string): Promise<void
 export function unassignLabel(contactId: string, categoryId: string): Promise<void> {
   return request<void>(`/api/contacts/${contactId}/labels/${categoryId}`, { method: "DELETE" });
 }
+
+// --- Campos personalizados ---
+
+/** Tipo de dado de um campo personalizado. */
+export type CustomFieldDataType = "text" | "number" | "boolean" | "date";
+
+/** Definição de um campo personalizado. */
+export interface CustomFieldDef {
+  id: string;
+  name: string;
+  data_type: CustomFieldDataType;
+  created_at: string;
+}
+
+/** Valor de um campo personalizado de um contato (com metadados da definição). */
+export interface CustomFieldValue {
+  field_id: string;
+  name: string;
+  data_type: CustomFieldDataType;
+  value: unknown;
+}
+
+/** Lista as definições de campos personalizados. */
+export function listCustomFieldDefs(): Promise<CustomFieldDef[]> {
+  return request<CustomFieldDef[]>("/api/custom-fields");
+}
+
+/** Cria uma definição de campo personalizado (admin). */
+export function createCustomFieldDef(name: string, dataType: CustomFieldDataType): Promise<CustomFieldDef> {
+  return request<CustomFieldDef>("/api/custom-fields", { method: "POST", body: { name, data_type: dataType } });
+}
+
+/** Remove uma definição de campo personalizado (e seus valores). */
+export function deleteCustomFieldDef(fieldId: string): Promise<void> {
+  return request<void>(`/api/custom-fields/${fieldId}`, { method: "DELETE" });
+}
+
+/** Lista os valores de campos personalizados de um contato. */
+export function listContactCustomFields(contactId: string): Promise<CustomFieldValue[]> {
+  return request<CustomFieldValue[]>(`/api/contacts/${contactId}/custom-fields`);
+}
+
+/** Define/atualiza o valor de um campo personalizado de um contato. */
+export function setContactCustomField(contactId: string, fieldId: string, value: unknown): Promise<void> {
+  return request<void>(`/api/contacts/${contactId}/custom-fields/${fieldId}`, { method: "PUT", body: { value } });
+}
+
+/** Remove o valor de um campo personalizado de um contato. */
+export function clearContactCustomField(contactId: string, fieldId: string): Promise<void> {
+  return request<void>(`/api/contacts/${contactId}/custom-fields/${fieldId}`, { method: "DELETE" });
+}

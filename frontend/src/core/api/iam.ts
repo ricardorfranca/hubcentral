@@ -16,6 +16,8 @@ export interface AdminUser {
   role: UserRole;
   status: "active" | "disabled";
   password_set: boolean;
+  /** Ramal do usuário no PABX (discagem via curl). */
+  extension: string | null;
 }
 
 /** Lista o catálogo de namespaces RBAC disponíveis. */
@@ -38,8 +40,11 @@ export function resendInvite(id: string): Promise<void> {
   return request<void>(`/api/iam/users/${id}/resend`, { method: "POST" });
 }
 
-/** Altera papel e/ou status de um usuário. */
-export function updateUser(id: string, patch: { role?: UserRole; status?: "active" | "disabled" }): Promise<AdminUser> {
+/** Altera papel, status e/ou ramal de um usuário. */
+export function updateUser(
+  id: string,
+  patch: { role?: UserRole; status?: "active" | "disabled"; extension?: string | null },
+): Promise<AdminUser> {
   return request<AdminUser>(`/api/iam/users/${id}`, { method: "PATCH", body: patch });
 }
 

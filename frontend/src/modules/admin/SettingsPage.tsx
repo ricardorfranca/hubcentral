@@ -14,6 +14,7 @@ import {
   CircularProgress, Divider, Alert,
 } from "@mui/material";
 import { listSettings, updateSetting, testSmtp, testSms, type Setting } from "../../core/api/settings.js";
+import { testMyChannel } from "../../core/api/comms.js";
 import { uploadLogo } from "../../core/api/branding.js";
 import { downloadBackup, restoreBackup } from "../../core/api/backup.js";
 import { useBrandingStore } from "../../core/branding/branding-store.js";
@@ -27,6 +28,45 @@ const MODULE_LABELS: Record<string, string> = {
 };
 
 /**
+ * Rótulos amigáveis por subgrupo (prefixo da chave `modulo.recurso`). Usado para
+ * separar visualmente os parâmetros dentro de cada módulo e evitar confusão
+ * entre áreas (identidade visual, e-mail, SMS, WhatsApp, telefonia, etc.).
+ */
+const SUBGROUP_LABELS: Record<string, string> = {
+  "core.branding": "Identidade visual (white-label)",
+  "core.smtp": "E-mail (SMTP)",
+  "core.sms": "SMS (gateway)",
+  "core.whatsapp": "WhatsApp (Evolution API)",
+  "core.telephony": "Telefonia / PABX (discagem)",
+  "core.uploads": "Uploads e anexos",
+  "core.security": "Segurança",
+};
+
+/** Ordem de exibição dos subgrupos conhecidos (demais vão ao final, alfabético). */
+const SUBGROUP_ORDER = [
+  "core.branding",
+  "core.smtp",
+  "core.sms",
+  "core.whatsapp",
+  "core.telephony",
+  "core.uploads",
+  "core.security",
+];
+
+/** Deriva o prefixo de subgrupo `modulo.recurso` a partir da chave. */
+function subgroupOf(key: string): string {
+  const parts = key.split(".");
+  return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : parts[0] ?? key;
+}
+
+/** Rótulo amigável do subgrupo (fallback: capitaliza o recurso). */
+function subgroupLabel(prefix: string): string {
+  if (SUBGROUP_LABELS[prefix]) return SUBGROUP_LABELS[prefix];
+  const resource = prefix.split(".")[1] ?? prefix;
+  return resource.charAt(0).toUpperCase() + resource.slice(1);
+}
+
+/**
  * Página da Central de Configurações.
  *
  * @returns A tela de configurações.
@@ -35,14 +75,27 @@ export function SettingsPage(): JSX.Element {
   const can = useCan();
   const { data: settings, isLoading } = useQuery({ queryKey: ["settings"], queryFn: () => listSettings() });
 
-  // Agrupa por módulo.
+  // Agrupa por módulo e, dentro de cada módulo, por subgrupo temático (prefixo
+  // `modulo.recurso`) para não misturar áreas distintas (e-mail, SMS, WhatsApp…).
   const groups = useMemo(() => {
-    const map = new Map<string, Setting[]>();
+    const byModule = new Map<string, Map<string, Setting[]>>();
     for (const s of settings ?? []) {
-      if (!map.has(s.module)) map.set(s.module, []);
-      map.get(s.module)!.push(s);
+      if (!byModule.has(s.module)) byModule.set(s.module, new Map());
+      const sub = byModule.get(s.module)!;
+      const prefix = subgroupOf(s.key);
+      if (!sub.has(prefix)) sub.set(prefix, []);
+      sub.get(prefix)!.push(s);
     }
-    return [...map.entries()];
+    // Ordena subgrupos pela ordem conhecida e, depois, alfabeticamente.
+    return [...byModule.entries()].map(([module, sub]) => {
+      const subgroups = [...sub.entries()].sort((a, b) => {
+        const ia = SUBGROUP_ORDER.indexOf(a[0]);
+        const ib = SUBGROUP_ORDER.indexOf(b[0]);
+        if (ia !== -1 || ib !== -1) return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+        return a[0].localeCompare(b[0]);
+      });
+      return [module, subgroups] as const;
+    });
   }, [settings]);
 
   if (isLoading) {
@@ -51,19 +104,35 @@ export function SettingsPage(): JSX.Element {
 
   return (
     <Box>
-      <Typography variant="h5" sx={{ mb: 2 }}>Configurações do sistema</Typography>
+      <Typography variant="h5" sx={{ mb: 0.5 }}>Configurações do sistema</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Parâmetros agrupados por área. Cada seção reúne apenas as configurações do seu tema.
+      </Typography>
       {groups.length === 0 && <Typography color="text.secondary">Nenhum parâmetro configurável.</Typography>}
       <Stack spacing={2}>
-        {groups.map(([module, items]) => (
+        {groups.map(([module, subgroups]) => (
           <Card key={module} variant="outlined">
             <CardContent>
               <Typography variant="h6" gutterBottom>{MODULE_LABELS[module] ?? module}</Typography>
               <Divider sx={{ mb: 2 }} />
-              <Stack spacing={2}>
-                {items.map((s) => <SettingEditor key={s.key} setting={s} />)}
+              <Stack spacing={3}>
+                {subgroups.map(([prefix, items]) => (
+                  <Box key={prefix}>
+                    {/* Só rotula o subgrupo quando há mais de um subgrupo no módulo. */}
+                    {subgroups.length > 1 && (
+                      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
+                        {subgroupLabel(prefix)}
+                      </Typography>
+                    )}
+                    <Stack spacing={2}>
+                      {items.map((s) => <SettingEditor key={s.key} setting={s} />)}
+                    </Stack>
+                    {prefix === "core.smtp" && <SmtpTestPanel />}
+                    {prefix === "core.sms" && <SmsTestPanel />}
+                    {prefix === "core.whatsapp" && <WhatsappTestPanel />}
+                  </Box>
+                ))}
               </Stack>
-              {items.some((s) => s.key.startsWith("core.smtp.")) && <SmtpTestPanel />}
-              {items.some((s) => s.key.startsWith("core.sms.")) && <SmsTestPanel />}
             </CardContent>
           </Card>
         ))}
@@ -330,6 +399,35 @@ function SmsTestPanel(): JSX.Element {
           {test.isPending ? "Testando…" : "Testar"}
         </Button>
       </Stack>
+    </Box>
+  );
+}
+
+/**
+ * Painel de teste do canal de WhatsApp (Evolution API). Verifica a conexão da
+ * instância do usuário autenticado. Cada usuário configura suas credenciais em
+ * "Meu canal de WhatsApp"; aqui ficam apenas os valores globais de fallback.
+ */
+function WhatsappTestPanel(): JSX.Element {
+  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const test = useMutation({
+    mutationFn: () => testMyChannel(),
+    onSuccess: (r) => setResult({ ok: true, msg: `Instância "${r.instance}" conectada.` }),
+    onError: (e) => setResult({ ok: false, msg: e instanceof Error ? e.message : "Falha ao testar o canal de WhatsApp." }),
+  });
+
+  return (
+    <Box sx={{ mt: 2 }}>
+      <Divider sx={{ mb: 2 }} />
+      <Typography variant="subtitle2" gutterBottom>Teste do canal de WhatsApp</Typography>
+      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+        Os valores acima são o padrão (fallback) global. Cada usuário define suas próprias credenciais
+        em Usuários → canal de WhatsApp, ou o superadministrador pode inseri-las.
+      </Typography>
+      {result && <Alert severity={result.ok ? "success" : "error"} sx={{ mb: 1 }} onClose={() => setResult(null)}>{result.msg}</Alert>}
+      <Button variant="outlined" onClick={() => test.mutate()} disabled={test.isPending}>
+        {test.isPending ? "Testando…" : "Testar minha conexão"}
+      </Button>
     </Box>
   );
 }

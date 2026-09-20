@@ -42,11 +42,13 @@ export function listCampaigns(): Promise<Campaign[]> {
 }
 export function createCampaign(payload: {
   name: string; tags: string[]; channels: CrmChannel[]; subject?: string | undefined; body_type?: "text" | "html" | undefined; body_text?: string | undefined; body_html?: string | undefined;
+  auto_dispatch?: boolean | undefined; scheduled_at?: string | null | undefined; batch_size?: number | undefined; per_hour?: number | null | undefined;
 }): Promise<Campaign> {
   return request<Campaign>("/api/crm/campaigns", { method: "POST", body: payload });
 }
 export function updateCampaign(id: string, patch: {
   name?: string | undefined; tags?: string[] | undefined; channels?: CrmChannel[] | undefined; status?: "draft" | "active" | "paused" | undefined; subject?: string | undefined; body_type?: "text" | "html" | undefined; body_text?: string | undefined; body_html?: string | undefined;
+  auto_dispatch?: boolean | undefined; scheduled_at?: string | null | undefined; batch_size?: number | undefined; per_hour?: number | null | undefined;
 }): Promise<Campaign> {
   return request<Campaign>(`/api/crm/campaigns/${id}`, { method: "PATCH", body: patch });
 }

@@ -90,6 +90,18 @@ export interface Campaign {
   body_type: "text" | "html";
   body_text: string | null;
   body_html: string | null;
+  /** Dispara automaticamente após o cadastro. */
+  auto_dispatch: boolean;
+  /** Início do disparo (ISO) ou null (imediato). */
+  scheduled_at: string | null;
+  /** Mensagens por ciclo/lote. */
+  batch_size: number;
+  /** Teto de mensagens por hora (null = sem teto). */
+  per_hour: number | null;
+  /** Estado do disparo automático. */
+  dispatch_status: "idle" | "queued" | "running" | "done" | "error";
+  /** Total já enviado na execução corrente. */
+  sent_count: number;
 }
 
 /** Mensagem da mensageria interna. */

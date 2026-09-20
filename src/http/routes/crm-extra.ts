@@ -131,7 +131,11 @@ export function registerCrmMessagingRoutes(app: FastifyInstance, pool: Pool): vo
 
   // Campanhas: criar e disparar.
   app.post<{
-    Body: { name: string; tags: string[]; channels: CampaignChannel[]; subject?: string; body_type?: "text" | "html"; body_text?: string; body_html?: string };
+    Body: {
+      name: string; tags: string[]; channels: CampaignChannel[]; subject?: string;
+      body_type?: "text" | "html"; body_text?: string; body_html?: string;
+      auto_dispatch?: boolean; scheduled_at?: string | null; batch_size?: number; per_hour?: number | null;
+    };
   }>("/api/crm/campaigns", async (request, reply) => {
     const b = request.body;
     const input: Parameters<typeof createCampaign>[1] = { name: b.name, tags: b.tags, channels: b.channels };
@@ -139,6 +143,10 @@ export function registerCrmMessagingRoutes(app: FastifyInstance, pool: Pool): vo
     if (b.body_text !== undefined) input.bodyText = b.body_text;
     if (b.body_html !== undefined) input.bodyHtml = b.body_html;
     if (b.body_type !== undefined) input.bodyType = b.body_type;
+    if (b.auto_dispatch !== undefined) input.autoDispatch = b.auto_dispatch;
+    if (b.scheduled_at !== undefined) input.scheduledAt = b.scheduled_at;
+    if (b.batch_size !== undefined) input.batchSize = b.batch_size;
+    if (b.per_hour !== undefined) input.perHour = b.per_hour;
     const campaign = await withTransaction(pool, (c) => createCampaign(c, input, request.userId));
     return reply.status(201).send(campaign);
   });
@@ -146,7 +154,11 @@ export function registerCrmMessagingRoutes(app: FastifyInstance, pool: Pool): vo
   // Campanhas: editar (nome, etiquetas, canais, status, assunto, corpos).
   app.patch<{
     Params: { id: string };
-    Body: { name?: string; tags?: string[]; channels?: CampaignChannel[]; status?: "draft" | "active" | "paused"; subject?: string; body_type?: "text" | "html"; body_text?: string; body_html?: string };
+    Body: {
+      name?: string; tags?: string[]; channels?: CampaignChannel[]; status?: "draft" | "active" | "paused";
+      subject?: string; body_type?: "text" | "html"; body_text?: string; body_html?: string;
+      auto_dispatch?: boolean; scheduled_at?: string | null; batch_size?: number; per_hour?: number | null;
+    };
   }>("/api/crm/campaigns/:id", async (request, reply) => {
     const b = request.body;
     const patch: Parameters<typeof updateCampaign>[2] = {};
@@ -158,6 +170,10 @@ export function registerCrmMessagingRoutes(app: FastifyInstance, pool: Pool): vo
     if (b.body_type !== undefined) patch.bodyType = b.body_type;
     if (b.body_text !== undefined) patch.bodyText = b.body_text;
     if (b.body_html !== undefined) patch.bodyHtml = b.body_html;
+    if (b.auto_dispatch !== undefined) patch.autoDispatch = b.auto_dispatch;
+    if (b.scheduled_at !== undefined) patch.scheduledAt = b.scheduled_at;
+    if (b.batch_size !== undefined) patch.batchSize = b.batch_size;
+    if (b.per_hour !== undefined) patch.perHour = b.per_hour;
     const campaign = await withTransaction(pool, (c) => updateCampaign(c, request.params.id, patch, request.userId));
     if (!campaign) return reply.status(404).send({ code: "CRM_CAMPAIGN_NOT_FOUND", message: "Campanha não encontrada.", details: {} });
     return reply.send(campaign);

@@ -27,6 +27,12 @@ import {
   evaluateSegment,
   type SegmentCriteria,
 } from "../../core/contacts/segment-service.js";
+import {
+  listCustomFieldDefs, defineCustomField, deleteCustomFieldDef,
+  listContactCustomFieldValues, setCustomFieldValue, clearCustomFieldValue,
+  type CustomFieldDataType,
+} from "../../core/contacts/custom-field-service.js";
+import { authorize } from "../../core/iam/rbac.js";
 
 /**
  * Registra as rotas de contatos e segmentos na instância Fastify.
@@ -119,6 +125,73 @@ export function registerContactRoutes(app: FastifyInstance, pool: Pool): void {
     await withTransaction(pool, (client) => deleteContact(client, request.params.id));
     return reply.status(204).send();
   });
+
+  // --- Campos personalizados (definições) ---
+
+  // Listar definições de campos personalizados.
+  app.get("/api/custom-fields", async (_request, reply) => {
+    const defs = await withTransaction(pool, (c) => listCustomFieldDefs(c));
+    return reply.send(defs);
+  });
+
+  // Criar uma definição de campo personalizado (admin de configurações).
+  app.post<{ Body: { name: string; data_type: CustomFieldDataType } }>(
+    "/api/custom-fields",
+    async (request, reply) => {
+      const def = await withTransaction(pool, async (c) => {
+        await authorize(c, request.userId, "core:config:gerenciar");
+        return defineCustomField(c, request.body.name, request.body.data_type);
+      });
+      return reply.status(201).send(def);
+    },
+  );
+
+  // Remover uma definição de campo personalizado (e seus valores, em cascata).
+  app.delete<{ Params: { fieldId: string } }>(
+    "/api/custom-fields/:fieldId",
+    async (request, reply) => {
+      await withTransaction(pool, async (c) => {
+        await authorize(c, request.userId, "core:config:gerenciar");
+        await deleteCustomFieldDef(c, request.params.fieldId);
+      });
+      return reply.status(204).send();
+    },
+  );
+
+  // --- Campos personalizados (valores por contato) ---
+
+  // Listar os valores de campos personalizados de um contato.
+  app.get<{ Params: { id: string } }>(
+    "/api/contacts/:id/custom-fields",
+    async (request, reply) => {
+      const values = await withTransaction(pool, (c) => listContactCustomFieldValues(c, request.params.id));
+      return reply.send(values);
+    },
+  );
+
+  // Definir/atualizar o valor de um campo personalizado de um contato.
+  app.put<{ Params: { id: string; fieldId: string }; Body: { value: unknown } }>(
+    "/api/contacts/:id/custom-fields/:fieldId",
+    async (request, reply) => {
+      await withTransaction(pool, async (c) => {
+        await authorize(c, request.userId, "core:contatos:editar");
+        await setCustomFieldValue(c, request.params.id, request.params.fieldId, request.body.value);
+      });
+      return reply.status(204).send();
+    },
+  );
+
+  // Remover o valor de um campo personalizado de um contato.
+  app.delete<{ Params: { id: string; fieldId: string } }>(
+    "/api/contacts/:id/custom-fields/:fieldId",
+    async (request, reply) => {
+      await withTransaction(pool, async (c) => {
+        await authorize(c, request.userId, "core:contatos:editar");
+        await clearCustomFieldValue(c, request.params.id, request.params.fieldId);
+      });
+      return reply.status(204).send();
+    },
+  );
 
   // Criar segmento persistido.
   app.post<{ Body: { name: string; criteria: SegmentCriteria } }>(

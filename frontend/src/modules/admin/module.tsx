@@ -9,9 +9,11 @@
 
 import PeopleIcon from "@mui/icons-material/People";
 import TuneIcon from "@mui/icons-material/Tune";
+import ViewListIcon from "@mui/icons-material/ViewList";
 import type { ModuleDefinition } from "../../core/modules/types.js";
 import { UsersPage } from "./UsersPage.js";
 import { SettingsPage } from "./SettingsPage.js";
+import { CustomFieldsPage } from "./CustomFieldsPage.js";
 
 /** Módulo de administração de usuários e configurações do sistema. */
 export const adminModule: ModuleDefinition = {
@@ -21,10 +23,12 @@ export const adminModule: ModuleDefinition = {
   requiredNamespace: "core:usuarios:gerenciar",
   menu: [
     { label: "Usuários", path: "/admin/usuarios", icon: PeopleIcon, requiredNamespace: "core:usuarios:gerenciar" },
+    { label: "Campos personalizados", path: "/admin/campos-personalizados", icon: ViewListIcon, requiredNamespace: "core:config:gerenciar" },
     { label: "Configurações", path: "/admin/configuracoes", icon: TuneIcon, requiredNamespace: "core:config:gerenciar" },
   ],
   routes: [
     { path: "admin/usuarios", element: <UsersPage /> },
+    { path: "admin/campos-personalizados", element: <CustomFieldsPage /> },
     { path: "admin/configuracoes", element: <SettingsPage /> },
   ],
 };
