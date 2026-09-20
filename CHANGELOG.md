@@ -2,6 +2,24 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.9.1] - 2026-09-20
+
+### Adicionado
+
+- **WhatsApp por usuário (Evolution API)**: cada usuário configura seu próprio canal (URL base, instância e API key) em "Minha conta → Meu canal de WhatsApp"; o superadministrador pode inserir/editar as credenciais de qualquer usuário. Valores globais servem de fallback. Envio de mensagens a partir do cadastro de contatos e teste de conexão da instância.
+- **Telefonia / discagem via PABX**: campo **Ramal** por usuário e comando **curl** de discagem configurável (Configurações → Telefonia/PABX) com variáveis do sistema (`{{ramal}}`, `{{telefone}}`, `{{telefone_e164}}`, `{{usuario}}`, `{{contato}}`). Botão "Ligar" no contato solicita a chamada ao PABX remoto para o ramal do usuário.
+- **Botões de ação no contato**: WhatsApp, Ligar e SMS diretamente no cadastro, usando o telefone do contato.
+- **Campos personalizados de contatos (UI)**: gestão de definições tipadas (texto/número/sim-não/data) em Administração → Campos personalizados e edição dos valores por contato, para enriquecer os cadastros (ex.: escola dos filhos).
+- **Campanhas — agendamento e ritmo**: disparo automático após o cadastro, com "mensagens por vez" e "máximo por hora" (worker de disparo controlado). Seletor de variáveis do contato/lead (nome, empresa, e-mail, telefone, vendedor, produto e campos personalizados) para corpo e assunto. WhatsApp adicionado como canal de disparo.
+
+### Alterado
+
+- **Configurações gerais reorganizadas** por seções temáticas (Identidade visual, E-mail/SMTP, SMS, WhatsApp/Evolution, Telefonia/PABX) para não misturar áreas.
+
+### Corrigido
+
+- **Modo escuro na tela de Oportunidades**: colunas do Kanban e cartões passam a usar tokens do tema (`background.default`/`background.paper` + `text.primary`), corrigindo o fundo claro com texto claro por cima que deixava o texto dos cartões invisível.
+
 ## [0.9.0] - 2026-09-20
 
 ### Adicionado
