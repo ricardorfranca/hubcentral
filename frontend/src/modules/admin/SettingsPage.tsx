@@ -13,7 +13,7 @@ import {
   Box, Typography, Card, CardContent, Stack, TextField, Button, Switch, FormControlLabel,
   CircularProgress, Divider, Alert,
 } from "@mui/material";
-import { listSettings, updateSetting, testSmtp, type Setting } from "../../core/api/settings.js";
+import { listSettings, updateSetting, testSmtp, testSms, type Setting } from "../../core/api/settings.js";
 import { uploadLogo } from "../../core/api/branding.js";
 import { downloadBackup, restoreBackup } from "../../core/api/backup.js";
 import { useBrandingStore } from "../../core/branding/branding-store.js";
@@ -63,6 +63,7 @@ export function SettingsPage(): JSX.Element {
                 {items.map((s) => <SettingEditor key={s.key} setting={s} />)}
               </Stack>
               {items.some((s) => s.key.startsWith("core.smtp.")) && <SmtpTestPanel />}
+              {items.some((s) => s.key.startsWith("core.sms.")) && <SmsTestPanel />}
             </CardContent>
           </Card>
         ))}
@@ -299,5 +300,36 @@ function BackupPanel(): JSX.Element {
         </Stack>
       </CardContent>
     </Card>
+  );
+}
+
+/** Painel de teste do gateway de SMS (Clickatell/GoIP). */
+function SmsTestPanel(): JSX.Element {
+  const [testTo, setTestTo] = useState("");
+  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const test = useMutation({
+    mutationFn: () => testSms(testTo.trim() || undefined),
+    onSuccess: (r) => setResult({ ok: true, msg: r.sent ? `SMS de teste enviado via ${r.provider}.` : `Gateway ${r.provider} verificado.` }),
+    onError: (e) => setResult({ ok: false, msg: e instanceof Error ? e.message : "Falha no teste de SMS." }),
+  });
+
+  return (
+    <Box sx={{ mt: 2 }}>
+      <Divider sx={{ mb: 2 }} />
+      <Typography variant="subtitle2" gutterBottom>Teste de SMS</Typography>
+      {result && <Alert severity={result.ok ? "success" : "error"} sx={{ mb: 1 }} onClose={() => setResult(null)}>{result.msg}</Alert>}
+      <Stack direction="row" spacing={1} alignItems="center">
+        <TextField
+          size="small"
+          fullWidth
+          label="Enviar SMS de teste para (opcional, com DDD)"
+          value={testTo}
+          onChange={(e) => setTestTo(e.target.value)}
+        />
+        <Button variant="outlined" onClick={() => test.mutate()} disabled={test.isPending}>
+          {test.isPending ? "Testando…" : "Testar"}
+        </Button>
+      </Stack>
+    </Box>
   );
 }

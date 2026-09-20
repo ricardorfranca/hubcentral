@@ -141,6 +141,10 @@ export const ErrorCode = {
   SMTP_ERROR: "SMTP_ERROR",
   /** Falha em operação de backup/restore. */
   BACKUP_ERROR: "BACKUP_ERROR",
+  /** SMS não configurado (provedor/credenciais ausentes). */
+  SMS_NOT_CONFIGURED: "SMS_NOT_CONFIGURED",
+  /** Falha ao enviar SMS pelo gateway. */
+  SMS_ERROR: "SMS_ERROR",
   /** Acesso negado a um projeto do qual o usuário não participa (Projetos). */
   PROJ_ACCESS_DENIED: "PROJ_ACCESS_DENIED",
   /** Projeto não encontrado. */

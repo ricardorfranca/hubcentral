@@ -39,3 +39,11 @@ export function testSmtp(testTo?: string): Promise<{ ok: boolean; sent: boolean 
     body: testTo ? { test_to: testTo } : {},
   });
 }
+
+/** Testa o gateway de SMS; se `testTo` for informado, envia um SMS de teste. */
+export function testSms(testTo?: string): Promise<{ ok: boolean; provider: string; sent: boolean }> {
+  return request<{ ok: boolean; provider: string; sent: boolean }>("/api/settings/sms/test", {
+    method: "POST",
+    body: testTo ? { test_to: testTo } : {},
+  });
+}

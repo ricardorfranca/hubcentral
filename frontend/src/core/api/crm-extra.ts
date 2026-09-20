@@ -41,12 +41,17 @@ export function listCampaigns(): Promise<Campaign[]> {
   return request<Campaign[]>("/api/crm/campaigns");
 }
 export function createCampaign(payload: {
-  name: string; tags: string[]; channels: CrmChannel[]; subject?: string; body_text?: string; body_html?: string;
+  name: string; tags: string[]; channels: CrmChannel[]; subject?: string | undefined; body_type?: "text" | "html" | undefined; body_text?: string | undefined; body_html?: string | undefined;
 }): Promise<Campaign> {
   return request<Campaign>("/api/crm/campaigns", { method: "POST", body: payload });
 }
-export function dispatchCampaign(id: string, channel: CrmChannel, categoryIds: string[]): Promise<{ lead_count: number }> {
-  return request<{ lead_count: number }>(`/api/crm/campaigns/${id}/dispatch`, {
+export function updateCampaign(id: string, patch: {
+  name?: string | undefined; tags?: string[] | undefined; channels?: CrmChannel[] | undefined; status?: "draft" | "active" | "paused" | undefined; subject?: string | undefined; body_type?: "text" | "html" | undefined; body_text?: string | undefined; body_html?: string | undefined;
+}): Promise<Campaign> {
+  return request<Campaign>(`/api/crm/campaigns/${id}`, { method: "PATCH", body: patch });
+}
+export function dispatchCampaign(id: string, channel: CrmChannel, categoryIds: string[]): Promise<{ lead_count: number; delivered: number; failed: number }> {
+  return request<{ lead_count: number; delivered: number; failed: number }>(`/api/crm/campaigns/${id}/dispatch`, {
     method: "POST",
     body: { channel, category_ids: categoryIds },
   });

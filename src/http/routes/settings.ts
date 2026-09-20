@@ -13,6 +13,7 @@ import { withTransaction } from "../../core/db/pool.js";
 import { authorize } from "../../core/iam/rbac.js";
 import { listSettings, setSetting, resolveValue } from "../../core/settings/settings-service.js";
 import { verifyConnection, sendEmail } from "../../core/email/email-service.js";
+import { verifySms, sendSms } from "../../core/sms/sms-service.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -85,6 +86,20 @@ export function registerSettingsRoutes(app: FastifyInstance, pool: Pool): void {
         return { ok: true, sent: true };
       }
       return { ok: true, sent: false };
+    });
+    return reply.send(result);
+  });
+
+  // Testa a configuração de SMS; opcionalmente envia um SMS de teste.
+  app.post<{ Body: { test_to?: string } }>("/api/settings/sms/test", async (request, reply) => {
+    const result = await withTransaction(pool, async (c) => {
+      await authorize(c, request.userId, CONFIG_NS);
+      const verified = await verifySms(c);
+      if (request.body?.test_to) {
+        await sendSms(c, request.body.test_to, "HUB Central — teste de SMS.");
+        return { ...verified, sent: true };
+      }
+      return { ...verified, sent: false };
     });
     return reply.send(result);
   });

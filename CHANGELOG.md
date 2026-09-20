@@ -2,6 +2,26 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.9.0] - 2026-09-20
+
+### Adicionado
+
+- **Tela de Contatos** (Base Central): gestão de pessoas e empresas (leads ou não) num único lugar, com busca, rótulos (labels) aplicáveis inline e criação. É a fundação já existente (`core.contacts`) agora com interface própria, referenciada por CRM, Projetos e campanhas.
+- **Autofill de CNPJ**: no cadastro de empresa (Contatos e CRM), o CNPJ é o primeiro campo; ao preenchê-lo, os dados oficiais (razão social) são buscados na BrasilAPI e pré-preenchidos, permanecendo editáveis. Degrada com elegância sem internet.
+- **Telefone padronizado (Brasil)**: campo com prefixo fixo `+55`, bandeira do Brasil e máscara DDD + número, armazenando em E.164. Aplicado no cadastro de pessoas.
+- **SMS multicanal**: dois gateways configuráveis — **Clickatell** (API na nuvem) e **GoIP** (gateway GSM local) — com teste de conexão/envio. O canal SMS de campanha passa a enviar de verdade quando configurado.
+- **Editor de campanhas** reformulado: nome, segmentação por etiquetas (chips), canais Email/WhatsApp/SMS, status (Rascunho/Ativa/Pausada), assunto, formato do conteúdo (texto/HTML) e corpo com variáveis (`{{nome_lead}}`). Edição e disparo com retorno de entregues/falhas.
+
+### Alterado
+
+- Menu do CRM: **"Contas" renomeado para "Empresas"**.
+- Disparo de campanha por Email/SMS passa a usar o serviço central de e-mail/SMS (best-effort por contato).
+
+### Operação
+
+- Variáveis de SMS opcionais (`SMS_*`) como fallback; preferencialmente configure pela Central de Configurações.
+- O autofill de CNPJ faz uma chamada de saída à BrasilAPI a partir do servidor.
+
 ## [0.8.0] - 2026-09-20
 
 ### Adicionado — Plataforma

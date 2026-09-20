@@ -11,6 +11,8 @@ import type { PoolClient } from "pg";
 import { evaluateSegment } from "../../core/contacts/segment-service.js";
 import { log as auditLog } from "../../core/audit/audit-logger.js";
 import { publish, buildEnvelope } from "../../core/events/event-bus.js";
+import { sendEmail } from "../../core/email/email-service.js";
+import { sendSms } from "../../core/sms/sms-service.js";
 
 /** Canal de disparo. */
 export type CampaignChannel = "email" | "whatsapp" | "sms";
@@ -95,6 +97,58 @@ export async function createCampaign(
 }
 
 /**
+ * Atualiza uma campanha (nome, etiquetas, canais, status, assunto e corpos).
+ * Apenas os campos presentes são alterados. Audita.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param id - `id` da campanha.
+ * @param patch - Campos a alterar.
+ * @param actorUserId - Autor.
+ * @returns A campanha atualizada, ou `null` se não existe.
+ */
+export async function updateCampaign(
+  client: PoolClient,
+  id: string,
+  patch: {
+    name?: string;
+    tags?: string[];
+    channels?: CampaignChannel[];
+    status?: "draft" | "active" | "paused";
+    subject?: string | null;
+    bodyType?: "text" | "html";
+    bodyText?: string | null;
+    bodyHtml?: string | null;
+  },
+  actorUserId: string | null = null,
+): Promise<Campaign | null> {
+  const { rows } = await client.query<Campaign>(
+    `UPDATE mod_crm.campaigns SET
+       name = COALESCE($2, name),
+       tags = COALESCE($3, tags),
+       channels = COALESCE($4, channels),
+       status = COALESCE($5, status),
+       subject = COALESCE($6, subject),
+       body_type = COALESCE($7, body_type),
+       body_text = COALESCE($8, body_text),
+       body_html = COALESCE($9, body_html)
+     WHERE id = $1
+     RETURNING ${CAMPAIGN_COLUMNS}`,
+    [
+      id, patch.name ?? null, patch.tags ?? null, patch.channels ?? null, patch.status ?? null,
+      patch.subject ?? null, patch.bodyType ?? null, patch.bodyText ?? null, patch.bodyHtml ?? null,
+    ],
+  );
+  const campaign = rows[0] ?? null;
+  if (campaign) {
+    await auditLog(client, {
+      userId: actorUserId, module: "crm", action: "CRM_CAMPANHA_EDITADA",
+      payloadAfter: { campaign_id: id },
+    });
+  }
+  return campaign;
+}
+
+/**
  * Resolve o público-alvo de uma campanha: contatos que possuem TODAS as
  * categorias correspondentes às etiquetas da campanha (§6.1). A segmentação
  * roda na Base Central e retorna apenas `contact_id` (Req 6.3).
@@ -146,12 +200,53 @@ export async function dispatchCampaign(
   channel: CampaignChannel,
   audience: string[],
   actorUserId: string | null = null,
-): Promise<number> {
+): Promise<{ lead_count: number; delivered: number; failed: number }> {
+  let delivered = 0;
+  let failed = 0;
+
+  // Carrega a campanha para montar o conteúdo do envio.
+  const { rows } = await client.query<Campaign>(
+    `SELECT ${CAMPAIGN_COLUMNS} FROM mod_crm.campaigns WHERE id = $1`,
+    [campaignId],
+  );
+  const campaign = rows[0];
+
+  if (campaign && (channel === "email" || channel === "sms") && audience.length > 0) {
+    // Resolve dados de contato do público (nome/e-mail/telefone) da Base Central.
+    const contacts = await client.query<{ id: string; full_name: string | null; email: string | null; phone: string | null }>(
+      `SELECT id, full_name, email, phone FROM core.contacts WHERE id = ANY($1::uuid[])`,
+      [audience],
+    );
+
+    for (const contact of contacts.rows) {
+      const text = renderTemplate(campaign.body_text ?? "", { nome_lead: contact.full_name ?? "" });
+      try {
+        if (channel === "email" && contact.email) {
+          await sendEmail(client, {
+            to: contact.email,
+            subject: campaign.subject ?? campaign.name,
+            ...(campaign.body_type === "html" && campaign.body_html
+              ? { html: renderTemplate(campaign.body_html, { nome_lead: contact.full_name ?? "" }) }
+              : { text }),
+          });
+          delivered += 1;
+        } else if (channel === "sms" && contact.phone) {
+          await sendSms(client, contact.phone, text);
+          delivered += 1;
+        } else {
+          failed += 1; // sem canal de contato disponível
+        }
+      } catch {
+        failed += 1; // best-effort: uma falha não interrompe a campanha
+      }
+    }
+  }
+
   await auditLog(client, {
     userId: actorUserId,
     module: "crm",
     action: "CRM_CAMPANHA_DISPARADA",
-    payloadAfter: { campaign_id: campaignId, channel, lead_count: audience.length },
+    payloadAfter: { campaign_id: campaignId, channel, lead_count: audience.length, delivered, failed },
   });
 
   await publish(
@@ -163,5 +258,5 @@ export async function dispatchCampaign(
     }),
   );
 
-  return audience.length;
+  return { lead_count: audience.length, delivered, failed };
 }

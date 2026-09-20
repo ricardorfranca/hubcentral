@@ -16,7 +16,7 @@ import { sendMessage, listMessages, listConversations, markRead } from "../../mo
 import {
   createActivity, completeActivity, listMyActivities, listByOpportunity, type ActivityType,
 } from "../../modules/crm/activity-service.js";
-import { createCampaign, dispatchCampaign, resolveAudience, listCampaigns, type CampaignChannel } from "../../modules/crm/campaign-service.js";
+import { createCampaign, updateCampaign, dispatchCampaign, resolveAudience, listCampaigns, type CampaignChannel } from "../../modules/crm/campaign-service.js";
 import { closingsReport, lossReasonsReport, performanceReport, slaReport } from "../../modules/crm/report-service.js";
 
 /**
@@ -131,24 +131,46 @@ export function registerCrmMessagingRoutes(app: FastifyInstance, pool: Pool): vo
 
   // Campanhas: criar e disparar.
   app.post<{
-    Body: { name: string; tags: string[]; channels: CampaignChannel[]; subject?: string; body_text?: string; body_html?: string };
+    Body: { name: string; tags: string[]; channels: CampaignChannel[]; subject?: string; body_type?: "text" | "html"; body_text?: string; body_html?: string };
   }>("/api/crm/campaigns", async (request, reply) => {
     const b = request.body;
     const input: Parameters<typeof createCampaign>[1] = { name: b.name, tags: b.tags, channels: b.channels };
     if (b.subject !== undefined) input.subject = b.subject;
     if (b.body_text !== undefined) input.bodyText = b.body_text;
     if (b.body_html !== undefined) input.bodyHtml = b.body_html;
+    if (b.body_type !== undefined) input.bodyType = b.body_type;
     const campaign = await withTransaction(pool, (c) => createCampaign(c, input, request.userId));
     return reply.status(201).send(campaign);
   });
+
+  // Campanhas: editar (nome, etiquetas, canais, status, assunto, corpos).
+  app.patch<{
+    Params: { id: string };
+    Body: { name?: string; tags?: string[]; channels?: CampaignChannel[]; status?: "draft" | "active" | "paused"; subject?: string; body_type?: "text" | "html"; body_text?: string; body_html?: string };
+  }>("/api/crm/campaigns/:id", async (request, reply) => {
+    const b = request.body;
+    const patch: Parameters<typeof updateCampaign>[2] = {};
+    if (b.name !== undefined) patch.name = b.name;
+    if (b.tags !== undefined) patch.tags = b.tags;
+    if (b.channels !== undefined) patch.channels = b.channels;
+    if (b.status !== undefined) patch.status = b.status;
+    if (b.subject !== undefined) patch.subject = b.subject;
+    if (b.body_type !== undefined) patch.bodyType = b.body_type;
+    if (b.body_text !== undefined) patch.bodyText = b.body_text;
+    if (b.body_html !== undefined) patch.bodyHtml = b.body_html;
+    const campaign = await withTransaction(pool, (c) => updateCampaign(c, request.params.id, patch, request.userId));
+    if (!campaign) return reply.status(404).send({ code: "CRM_CAMPAIGN_NOT_FOUND", message: "Campanha não encontrada.", details: {} });
+    return reply.send(campaign);
+  });
+
   app.post<{ Params: { id: string }; Body: { channel: CampaignChannel; category_ids: string[] } }>(
     "/api/crm/campaigns/:id/dispatch",
     async (request, reply) => {
-      const count = await withTransaction(pool, async (c) => {
+      const result = await withTransaction(pool, async (c) => {
         const audience = await resolveAudience(c, request.body.category_ids);
         return dispatchCampaign(c, request.params.id, request.body.channel, audience, request.userId);
       });
-      return reply.send({ lead_count: count });
+      return reply.send(result);
     },
   );
 

@@ -334,7 +334,9 @@ Implementado e coberto por testes (property-based + integração):
 - **IAM** — credenciais (scrypt), papéis, sessões por token, convite com senha temporária, primeiro acesso, cooldown de reenvio.
 - **CRM 2.0 (Receita Previsível, B2B)** — contas (empresas) permanentes referenciando a Base Central; oportunidades efêmeras com MRR + valor único e ARR derivado; pipeline de estágios configuráveis com probabilidade e SLA; atividades (cadência de vendas); forecast ponderado e dashboards; timeline, mensageria, campanhas e relatórios.
 - **Projetos Internos 2.0** — projetos com dono/membros (IAM), prazo e valor/hora; Kanban de 3 colunas com prazo, responsável único, visibilidade e dependência entre tarefas; Gantt; apontamento de tempo por comentário com totais; recursos/custos; anotação automática ao mover; anexos; desarquivar; relatório executivo em PDF; dashboard do superadmin; notificações in-app aos envolvidos.
-- **Núcleo — Notificações, Configurações, E-mail e Backup** — Central de Notificações in-app reutilizável; Central de Configurações por módulo (persistido → default → env); envio de e-mail SMTP com teste de conexão; backup/restore (banco + anexos) para o superadmin. Identidade visual (nome, logo, cores) e modo escuro no portal.
+- **Contatos (Base Central)** — tela de gestão de pessoas e empresas (leads ou não) com rótulos e busca; autofill de CNPJ (BrasilAPI); telefone padronizado BR (+55, E.164). É a fonte única referenciada por CRM, Projetos e campanhas.
+- **Campanhas** — segmentação por etiquetas e disparo multicanal (Email/WhatsApp/SMS) com status, assunto, formato texto/HTML e variáveis; SMS via Clickatell ou GoIP.
+- **Núcleo — Notificações, Configurações, E-mail, SMS e Backup** — Central de Notificações in-app reutilizável; Central de Configurações por módulo (persistido → default → env); envio de e-mail SMTP e SMS (Clickatell/GoIP) com teste; backup/restore (banco + anexos) para o superadmin. Identidade visual (nome, logo, cores) e modo escuro no portal.
 - **Infraestrutura** — API HTTP (Fastify), worker de despacho do outbox.
 
 ### Pendências conhecidas
