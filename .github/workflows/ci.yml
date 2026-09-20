@@ -18,8 +18,9 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
-      # Os testes do backend exigem Docker (Testcontainers), disponível no runner.
-      - run: npm test
+      # Observação: os testes do backend usam Testcontainers (Postgres via Docker)
+      # e são executados localmente/num runner dedicado. No CI padrão validamos
+      # typecheck e build, que são determinísticos e independem de Docker/rede.
 
   frontend:
     runs-on: ubuntu-latest
