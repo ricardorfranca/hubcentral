@@ -33,13 +33,14 @@ async function projectOwner(client: PoolClient, projectId: string): Promise<stri
   return rows[0]?.owner_user_id ?? null;
 }
 
-/** Retorna os `user_id` atribuídos a uma tarefa. */
+/** Retorna o `user_id` responsável por uma tarefa (0 ou 1). */
 async function taskAssignees(client: PoolClient, taskId: string): Promise<string[]> {
-  const { rows } = await client.query<{ user_id: string }>(
-    `SELECT user_id FROM mod_projetos.task_assignees WHERE task_id = $1`,
+  const { rows } = await client.query<{ assignee_user_id: string | null }>(
+    `SELECT assignee_user_id FROM mod_projetos.tasks WHERE id = $1`,
     [taskId],
   );
-  return rows.map((r) => r.user_id);
+  const a = rows[0]?.assignee_user_id;
+  return a ? [a] : [];
 }
 
 /** Retorna os `user_id` membros de um projeto. */

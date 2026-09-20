@@ -17,6 +17,7 @@ export interface Comment {
   id: string;
   author_user_id: string;
   body: string;
+  minutes?: number;
   created_at: Date;
 }
 
@@ -36,16 +37,17 @@ export async function addTaskComment(
   taskId: string,
   authorUserId: string,
   body: string,
+  minutes = 0,
 ): Promise<Comment> {
   const task = await getTask(client, taskId);
   if (!task) {
     throw new DomainError(ErrorCode.PROJ_TASK_NOT_FOUND, "Tarefa não encontrada.", { task_id: taskId });
   }
   const { rows } = await client.query<Comment>(
-    `INSERT INTO mod_projetos.task_comments (task_id, author_user_id, body)
-     VALUES ($1, $2, $3)
-     RETURNING id, author_user_id, body, created_at`,
-    [taskId, authorUserId, body],
+    `INSERT INTO mod_projetos.task_comments (task_id, author_user_id, body, minutes)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, author_user_id, body, minutes, created_at`,
+    [taskId, authorUserId, body, Math.max(0, Math.trunc(minutes))],
   );
   const comment = rows[0] as Comment;
   await auditLog(client, {
@@ -118,7 +120,7 @@ export async function listTaskComments(
   taskId: string,
 ): Promise<(Comment & { author_name: string | null })[]> {
   const { rows } = await client.query<Comment & { author_name: string | null }>(
-    `SELECT c.id, c.author_user_id, u.full_name AS author_name, c.body, c.created_at
+    `SELECT c.id, c.author_user_id, u.full_name AS author_name, c.body, c.minutes, c.created_at
      FROM mod_projetos.task_comments c
      JOIN core.users u ON u.id = c.author_user_id
      WHERE c.task_id = $1

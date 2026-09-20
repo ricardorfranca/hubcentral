@@ -2,18 +2,18 @@ import { describe, it, expect, afterAll } from "vitest";
 import type { Pool, PoolClient } from "pg";
 import { getTestPool, withRollback, closeTestPool } from "../helpers/db.js";
 import { buildEnvelope, type EventEnvelope } from "../../src/core/events/event-bus.js";
-import { createProject } from "../../src/modules/projetos/project-service.js";
+import { createProject, getProjectTotals } from "../../src/modules/projetos/project-service.js";
 import { addMember } from "../../src/modules/projetos/member-service.js";
 import { createTask, moveTask, listTasksByProject } from "../../src/modules/projetos/task-service.js";
-import { assign, unassign, listAssignees } from "../../src/modules/projetos/assignment-service.js";
+import { setAssignee } from "../../src/modules/projetos/assignment-service.js";
 import { addTaskComment, addProjectComment, listTaskComments } from "../../src/modules/projetos/comment-service.js";
 import { handleProjetosEvent } from "../../src/modules/projetos/notifier.js";
 
 /**
  * @file tasks-events.test.ts
  *
- * Testes da Fase 3: Kanban (criar/mover), atribuição, comentários (eventos no
- * outbox) e o notifier (evento -> notificações para os destinatários certos).
+ * Testes de Projetos 2.0: Kanban (criar/mover), dependências, prazos, tempo,
+ * atribuição única, comentários, eventos no outbox e o notifier.
  */
 
 afterAll(async () => {
@@ -30,7 +30,6 @@ async function newUser(client: PoolClient): Promise<string> {
   return rows[0]!.id;
 }
 
-/** Lê os event_names pendentes no outbox (dentro da transação de teste). */
 async function outboxNames(client: PoolClient): Promise<string[]> {
   const { rows } = await client.query<{ event_name: string }>(
     `SELECT event_name FROM core.event_outbox ORDER BY created_at`,
@@ -39,7 +38,7 @@ async function outboxNames(client: PoolClient): Promise<string[]> {
 }
 
 describe("Kanban de tarefas", () => {
-  it("cria tarefa na primeira coluna e move entre colunas (publica evento)", async () => {
+  it("cria tarefa, move entre colunas (evento + anotação automática)", async () => {
     await withRollback(async (client) => {
       const owner = await newUser(client);
       const p = await createProject(client, { name: "P" }, owner);
@@ -50,8 +49,12 @@ describe("Kanban de tarefas", () => {
       const moved = await moveTask(client, t.id, "em_execucao", undefined, owner);
       expect(moved.status).toBe("em_execucao");
 
-      const board = await listTasksByProject(client, p.id);
+      const board = await listTasksByProject(client, p.id, owner);
       expect(board.find((x) => x.id === t.id)?.status).toBe("em_execucao");
+
+      // Anotação automática registrada.
+      const comments = await listTaskComments(client, t.id);
+      expect(comments.some((c) => c.body.includes("moveu a tarefa"))).toBe(true);
 
       expect(await outboxNames(client)).toContain("projetos.tarefa.movida");
     });
@@ -65,10 +68,42 @@ describe("Kanban de tarefas", () => {
       await expect(createTask(client, { projectId: p.id, title: "X" }, owner)).rejects.toMatchObject({ code: "PROJ_ARCHIVED" });
     });
   });
+
+  it("valida prazo da tarefa dentro do prazo do projeto", async () => {
+    await withRollback(async (client) => {
+      const owner = await newUser(client);
+      const p = await createProject(client, { name: "P", dueDate: "2026-06-30" }, owner);
+      await expect(
+        createTask(client, { projectId: p.id, title: "T", dueDate: "2026-07-15" }, owner),
+      ).rejects.toMatchObject({ code: "PROJ_TASK_DUE_AFTER_PROJECT" });
+      // Dentro do prazo é aceito.
+      const ok = await createTask(client, { projectId: p.id, title: "T2", dueDate: "2026-06-15" }, owner);
+      expect(ok.due_date).not.toBeNull();
+    });
+  });
 });
 
-describe("Atribuição", () => {
-  it("atribui a participante e publica evento; nega não-participante", async () => {
+describe("Dependências", () => {
+  it("bloqueia iniciar tarefa cuja dependência não está finalizada", async () => {
+    await withRollback(async (client) => {
+      const owner = await newUser(client);
+      const p = await createProject(client, { name: "P" }, owner);
+      const a = await createTask(client, { projectId: p.id, title: "A" }, owner);
+      const b = await createTask(client, { projectId: p.id, title: "B", dependsOnTaskId: a.id }, owner);
+
+      // A não está finalizada: mover B para em_execucao deve falhar.
+      await expect(moveTask(client, b.id, "em_execucao", undefined, owner)).rejects.toMatchObject({ code: "PROJ_DEPENDENCY_NOT_DONE" });
+
+      // Finaliza A; agora B pode iniciar.
+      await moveTask(client, a.id, "finalizada", undefined, owner);
+      const moved = await moveTask(client, b.id, "em_execucao", undefined, owner);
+      expect(moved.status).toBe("em_execucao");
+    });
+  });
+});
+
+describe("Atribuição única", () => {
+  it("define responsável participante e publica evento; nega não-participante", async () => {
     await withRollback(async (client) => {
       const owner = await newUser(client);
       const membro = await newUser(client);
@@ -77,14 +112,55 @@ describe("Atribuição", () => {
       await addMember(client, p.id, membro, owner);
       const t = await createTask(client, { projectId: p.id, title: "T" }, owner);
 
-      await assign(client, t.id, membro, owner);
-      expect(await listAssignees(client, t.id)).toContain(membro);
+      await setAssignee(client, t.id, membro, owner);
       expect(await outboxNames(client)).toContain("projetos.tarefa.atribuida");
 
-      await expect(assign(client, t.id, estranho, owner)).rejects.toMatchObject({ code: "PROJ_ACCESS_DENIED" });
+      await expect(setAssignee(client, t.id, estranho, owner)).rejects.toMatchObject({ code: "PROJ_ACCESS_DENIED" });
 
-      await unassign(client, t.id, membro, owner);
-      expect(await listAssignees(client, t.id)).not.toContain(membro);
+      await setAssignee(client, t.id, null, owner);
+      const board = await listTasksByProject(client, p.id, owner);
+      expect(board.find((x) => x.id === t.id)?.assignee_user_id).toBeNull();
+    });
+  });
+});
+
+describe("Visibilidade de tarefa", () => {
+  it("tarefa restrita só aparece para dono e responsável", async () => {
+    await withRollback(async (client) => {
+      const owner = await newUser(client);
+      const membro = await newUser(client);
+      const p = await createProject(client, { name: "P" }, owner);
+      await addMember(client, p.id, membro, owner);
+      const t = await createTask(client, { projectId: p.id, title: "Secreta", visibleToAll: false }, owner);
+
+      // Owner vê; membro (não responsável) não vê.
+      expect((await listTasksByProject(client, p.id, owner)).some((x) => x.id === t.id)).toBe(true);
+      expect((await listTasksByProject(client, p.id, membro)).some((x) => x.id === t.id)).toBe(false);
+
+      // Ao atribuir o membro, ele passa a ver.
+      await setAssignee(client, t.id, membro, owner);
+      expect((await listTasksByProject(client, p.id, membro)).some((x) => x.id === t.id)).toBe(true);
+    });
+  });
+});
+
+describe("Tempo e custos", () => {
+  it("soma minutos dos comentários no card e no total do projeto", async () => {
+    await withRollback(async (client) => {
+      const owner = await newUser(client);
+      const p = await createProject(client, { name: "P", hourlyRate: 120 }, owner);
+      const t = await createTask(client, { projectId: p.id, title: "T" }, owner);
+
+      await addTaskComment(client, t.id, owner, "trabalho 1", 30);
+      await addTaskComment(client, t.id, owner, "trabalho 2", 90);
+
+      const board = await listTasksByProject(client, p.id, owner);
+      expect(board.find((x) => x.id === t.id)?.minutes_total).toBe(120);
+
+      const totals = await getProjectTotals(client, p.id);
+      expect(totals.total_minutes).toBe(120);
+      // 120 min = 2h × R$120 = R$240 de mão de obra.
+      expect(totals.labor_cost).toBe(240);
     });
   });
 });
@@ -100,8 +176,7 @@ describe("Comentários", () => {
       await addProjectComment(client, p.id, owner, "sobre o projeto");
 
       const comments = await listTaskComments(client, t.id);
-      expect(comments).toHaveLength(1);
-      expect(comments[0]!.body).toBe("primeiro");
+      expect(comments.some((c) => c.body === "primeiro")).toBe(true);
 
       const names = await outboxNames(client);
       expect(names).toContain("projetos.comentario.criado");
@@ -111,36 +186,30 @@ describe("Comentários", () => {
 });
 
 describe("Notifier (evento -> notificações)", () => {
-  // Usa dados COMMITADOS porque o handler abre a própria transação.
-  it("tarefa.movida notifica atribuídos + dono, exceto o autor; dedupe por event_id", async () => {
+  it("tarefa.movida notifica responsável + dono, exceto o autor; dedupe por event_id", async () => {
     const pool: Pool = getTestPool();
-    const ids: { owner?: string; membro?: string; project?: string; task?: string } = {};
+    const ids: { owner?: string; membro?: string; project?: string } = {};
     try {
-      // Setup commitado.
       const owner = await oneId(pool, `INSERT INTO core.users (email, full_name) VALUES ($1,'O') RETURNING id`, [`nowner-${rand()}@x.com`]);
       const membro = await oneId(pool, `INSERT INTO core.users (email, full_name) VALUES ($1,'M') RETURNING id`, [`nmembro-${rand()}@x.com`]);
       ids.owner = owner; ids.membro = membro;
       const project = await oneId(pool, `INSERT INTO mod_projetos.projects (name, owner_user_id) VALUES ('P',$1) RETURNING id`, [owner]);
       ids.project = project;
       await pool.query(`INSERT INTO mod_projetos.project_members (project_id, user_id) VALUES ($1,$2),($1,$3)`, [project, owner, membro]);
-      const task = await oneId(pool, `INSERT INTO mod_projetos.tasks (project_id, title) VALUES ($1,'T') RETURNING id`, [project]);
-      ids.task = task;
-      await pool.query(`INSERT INTO mod_projetos.task_assignees (task_id, user_id) VALUES ($1,$2)`, [task, membro]);
+      // Responsável único = membro.
+      const task = await oneId(pool, `INSERT INTO mod_projetos.tasks (project_id, title, assignee_user_id) VALUES ($1,'T',$2) RETURNING id`, [project, membro]);
 
-      // Evento movido pelo próprio membro -> destinatário deve ser só o dono.
       const env: EventEnvelope = buildEnvelope("projetos.tarefa.movida", "mod_projetos", {
         task_id: task, project_id: project, from: "nao_iniciada", to: "em_execucao", actor_user_id: membro,
       });
       await handleProjetosEvent(pool, env);
-      // Reprocessa o MESMO evento (dedupe).
-      await handleProjetosEvent(pool, env);
+      await handleProjetosEvent(pool, env); // reprocesso (dedupe)
 
       const ownerNotifs = await count(pool, `SELECT count(*)::int AS n FROM core.notifications WHERE recipient_user_id=$1 AND source_event_id=$2`, [owner, env.event_id]);
       const membroNotifs = await count(pool, `SELECT count(*)::int AS n FROM core.notifications WHERE recipient_user_id=$1 AND source_event_id=$2`, [membro, env.event_id]);
-      expect(ownerNotifs).toBe(1);   // dono recebe (uma vez, apesar do reprocesso)
-      expect(membroNotifs).toBe(0);  // autor não recebe
+      expect(ownerNotifs).toBe(1);
+      expect(membroNotifs).toBe(0);
     } finally {
-      // Limpeza (ordem por FK). CASCADE cuida de tasks/members/notifications de projeto.
       if (ids.project) await pool.query(`DELETE FROM mod_projetos.projects WHERE id=$1`, [ids.project]);
       if (ids.owner) await pool.query(`DELETE FROM core.notifications WHERE recipient_user_id=$1`, [ids.owner]);
       if (ids.membro) await pool.query(`DELETE FROM core.notifications WHERE recipient_user_id=$1`, [ids.membro]);

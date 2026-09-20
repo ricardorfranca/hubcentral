@@ -153,6 +153,14 @@ export const ErrorCode = {
   PROJ_ATTACHMENT_INVALID: "PROJ_ATTACHMENT_INVALID",
   /** Anexo não encontrado. */
   PROJ_ATTACHMENT_NOT_FOUND: "PROJ_ATTACHMENT_NOT_FOUND",
+  /** Prazo de tarefa ultrapassa o prazo do projeto. */
+  PROJ_TASK_DUE_AFTER_PROJECT: "PROJ_TASK_DUE_AFTER_PROJECT",
+  /** Movimento bloqueado: a dependência ainda não foi finalizada. */
+  PROJ_DEPENDENCY_NOT_DONE: "PROJ_DEPENDENCY_NOT_DONE",
+  /** Dependência inválida (ciclo ou tarefa de outro projeto). */
+  PROJ_DEPENDENCY_INVALID: "PROJ_DEPENDENCY_INVALID",
+  /** Projeto não está arquivado (nada a desarquivar). */
+  PROJ_NOT_ARCHIVED: "PROJ_NOT_ARCHIVED",
 } as const;
 
 /** União dos valores de {@link ErrorCode}. */
