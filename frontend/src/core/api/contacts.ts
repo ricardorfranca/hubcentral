@@ -62,6 +62,29 @@ export function deleteContact(id: string): Promise<void> {
   return request<void>(`/api/contacts/${id}`, { method: "DELETE" });
 }
 
+/** Dados oficiais de um CNPJ (autofill). */
+export interface CnpjData {
+  cnpj: string;
+  legal_name: string | null;
+  trade_name: string | null;
+  email: string | null;
+  phone: string | null;
+  city: string | null;
+  state: string | null;
+  status: string | null;
+}
+
+/** Consulta dados oficiais de um CNPJ para pré-preencher o cadastro. */
+export async function lookupCnpj(cnpj: string): Promise<CnpjData | null> {
+  const digits = cnpj.replace(/\D/g, "");
+  if (digits.length !== 14) return null;
+  try {
+    return await request<CnpjData>(`/api/contacts/cnpj/${digits}`);
+  } catch {
+    return null;
+  }
+}
+
 // --- Rótulos (categorias) ---
 
 /** Lista os rótulos disponíveis. */

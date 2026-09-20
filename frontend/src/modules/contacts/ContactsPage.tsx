@@ -17,7 +17,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import {
   listContacts, createPerson, createCompany, listLabels, createLabel, assignLabel, unassignLabel,
-  type ContactListItem,
+  lookupCnpj, type ContactListItem,
 } from "../../core/api/contacts.js";
 import { PhoneField } from "../../core/ui/PhoneField.js";
 import { ApiError } from "../../core/api/client.js";
@@ -160,6 +160,7 @@ function NewContactDialog({
   const [phone, setPhone] = useState("");
   const [legalName, setLegalName] = useState("");
   const [cnpj, setCnpj] = useState("");
+  const [lookup, setLookup] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const create = useMutation({
@@ -184,7 +185,22 @@ function NewContactDialog({
             </>
           ) : (
             <>
-              <TextField label="CNPJ" value={cnpj} onChange={(e) => setCnpj(e.target.value)} placeholder="00.000.000/0000-00" required />
+              <TextField
+                label="CNPJ"
+                value={cnpj}
+                onChange={(e) => setCnpj(e.target.value)}
+                onBlur={async () => {
+                  if (cnpj.replace(/\D/g, "").length !== 14) return;
+                  setLookup(true);
+                  const data = await lookupCnpj(cnpj);
+                  setLookup(false);
+                  if (data?.legal_name && !legalName) setLegalName(data.legal_name);
+                }}
+                placeholder="00.000.000/0000-00"
+                helperText={lookup ? "Consultando dados oficiais…" : "Ao sair do campo, buscamos os dados oficiais (editáveis)."}
+                required
+                autoFocus
+              />
               <TextField label="Razão social" value={legalName} onChange={(e) => setLegalName(e.target.value)} required />
             </>
           )}

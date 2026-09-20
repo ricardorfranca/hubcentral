@@ -17,6 +17,7 @@ import AddIcon from "@mui/icons-material/Add";
 import { useAccounts, useCreateAccount } from "./sales-hooks.js";
 import { useCan } from "../../core/rbac/can.js";
 import { ApiError } from "../../core/api/client.js";
+import { lookupCnpj } from "../../core/api/contacts.js";
 
 /**
  * Página de listagem de contas.
@@ -84,7 +85,16 @@ function NewAccountDialog({ open, onClose }: { open: boolean; onClose: () => voi
   const [cnpj, setCnpj] = useState("");
   const [segment, setSegment] = useState("");
   const [sizeTier, setSizeTier] = useState("");
+  const [lookup, setLookup] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function onCnpjBlur(): Promise<void> {
+    if (cnpj.replace(/\D/g, "").length !== 14) return;
+    setLookup(true);
+    const data = await lookupCnpj(cnpj);
+    setLookup(false);
+    if (data?.legal_name && !legalName) setLegalName(data.legal_name);
+  }
 
   async function submit(): Promise<void> {
     setError(null);
@@ -115,8 +125,17 @@ function NewAccountDialog({ open, onClose }: { open: boolean; onClose: () => voi
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
+          <TextField
+            label="CNPJ"
+            value={cnpj}
+            onChange={(e) => setCnpj(e.target.value)}
+            onBlur={onCnpjBlur}
+            required
+            autoFocus
+            placeholder="00.000.000/0000-00"
+            helperText={lookup ? "Consultando dados oficiais…" : "Ao sair do campo, buscamos a razão social (editável)."}
+          />
           <TextField label="Razão social" value={legalName} onChange={(e) => setLegalName(e.target.value)} required />
-          <TextField label="CNPJ" value={cnpj} onChange={(e) => setCnpj(e.target.value)} required placeholder="00.000.000/0000-00" />
           <Stack direction="row" spacing={2}>
             <TextField label="Segmento" value={segment} onChange={(e) => setSegment(e.target.value)} fullWidth />
             <TextField label="Porte" value={sizeTier} onChange={(e) => setSizeTier(e.target.value)} fullWidth />

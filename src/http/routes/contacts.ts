@@ -21,6 +21,7 @@ import type { ContactInput } from "../../core/contacts/types.js";
 import {
   listCategories, createCustomCategory, assignCategory, unassignCategory,
 } from "../../core/contacts/category-service.js";
+import { lookupCnpj } from "../../core/contacts/cnpj-lookup.js";
 import {
   createSegment,
   evaluateSegment,
@@ -47,6 +48,15 @@ export function registerContactRoutes(app: FastifyInstance, pool: Pool): void {
       return reply.send(items);
     },
   );
+
+  // Consulta de CNPJ para autofill de empresa (dados oficiais).
+  app.get<{ Params: { cnpj: string } }>("/api/contacts/cnpj/:cnpj", async (request, reply) => {
+    const data = await lookupCnpj(request.params.cnpj);
+    if (!data) {
+      return reply.status(404).send({ code: "CNPJ_NOT_FOUND", message: "CNPJ não encontrado ou serviço indisponível.", details: {} });
+    }
+    return reply.send(data);
+  });
 
   // Categorias (rótulos): listar e criar.
   app.get("/api/contacts/categories", async (_request, reply) => {
