@@ -170,13 +170,37 @@ fetch_code() {
 
   if [ -d "$INSTALL_DIR/.git" ]; then
     log "Atualizando código existente em $INSTALL_DIR (ref: $REF)..."
-    git -C "$INSTALL_DIR" fetch --quiet --all --tags
-    git -C "$INSTALL_DIR" checkout --quiet "$REF"
-    git -C "$INSTALL_DIR" pull --quiet --ff-only origin "$REF" || true
+    # Sincronização determinística com a origem: nunca depende de fast-forward
+    # nem do estado local (o diretório de deploy não deve ter alterações
+    # manuais). Se qualquer passo falhar, cai para re-clonagem limpa.
+    if git -C "$INSTALL_DIR" fetch --quiet --all --tags \
+       && git -C "$INSTALL_DIR" reset --hard --quiet "origin/${REF}" 2>/dev/null; then
+      : # atualizado com sucesso
+    elif git -C "$INSTALL_DIR" reset --hard --quiet "$REF" 2>/dev/null; then
+      : # ref é uma tag (não tem origin/<tag>); resetou para a tag
+    else
+      warn "Não foi possível atualizar o repositório existente; re-clonando limpo."
+      reclone_repo
+    fi
   else
     log "Clonando o repositório em $INSTALL_DIR (ref: $REF)..."
     mkdir -p "$INSTALL_DIR"
     git clone --quiet --branch "$REF" "$REPO_URL" "$INSTALL_DIR"
+  fi
+}
+
+# Re-clona o repositório preservando o .env existente (deploy corrompido/divergido).
+reclone_repo() {
+  local backup=""
+  if [ -f "$INSTALL_DIR/.env" ]; then
+    backup="$(mktemp)"
+    cp "$INSTALL_DIR/.env" "$backup"
+  fi
+  rm -rf "$INSTALL_DIR"
+  git clone --quiet --branch "$REF" "$REPO_URL" "$INSTALL_DIR"
+  if [ -n "$backup" ]; then
+    cp "$backup" "$INSTALL_DIR/.env"
+    rm -f "$backup"
   fi
 }
 

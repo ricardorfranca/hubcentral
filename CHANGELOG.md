@@ -2,6 +2,12 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.4.3] - 2026-09-19
+
+### Corrigido
+
+- **Atualização robusta no instalador**: a sincronização do código deixou de depender de `pull --ff-only` (que falhava se o repositório local divergisse) e passou a usar `fetch` + `reset --hard origin/<ref>`, com fallback para re-clonagem limpa (preservando o `.env`). Resolve casos em que o diretório de deploy fica num estado que impede a atualização.
+
 ## [0.4.2] - 2026-09-19
 
 ### Corrigido
