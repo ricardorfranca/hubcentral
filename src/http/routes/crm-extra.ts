@@ -13,7 +13,7 @@ import { addListItem, listItems, type ListType } from "../../modules/crm/list-se
 import { setSlaConfig, getSlaConfig, type SlaUnit } from "../../modules/crm/sla-service.js";
 import { getTimeline } from "../../modules/crm/timeline-service.js";
 import { sendMessage, listMessages } from "../../modules/crm/message-service.js";
-import { createCampaign, dispatchCampaign, resolveAudience, type CampaignChannel } from "../../modules/crm/campaign-service.js";
+import { createCampaign, dispatchCampaign, resolveAudience, listCampaigns, type CampaignChannel } from "../../modules/crm/campaign-service.js";
 import { closingsReport, lossReasonsReport, performanceReport, slaReport } from "../../modules/crm/report-service.js";
 
 /**
@@ -88,6 +88,12 @@ export function registerCrmMessagingRoutes(app: FastifyInstance, pool: Pool): vo
       return reply.status(201).send(msg);
     },
   );
+
+  // Campanhas: listar.
+  app.get("/api/crm/campaigns", async (_request, reply) => {
+    const campaigns = await withTransaction(pool, (c) => listCampaigns(c));
+    return reply.send(campaigns);
+  });
 
   // Campanhas: criar e disparar.
   app.post<{

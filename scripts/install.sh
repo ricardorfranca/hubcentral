@@ -299,6 +299,51 @@ install_nginx() {
   fi
 }
 
+# ----- Bootstrap do SuperAdministrador -----
+
+# Cria o primeiro SuperAdministrador, apenas se ainda não existir nenhum.
+# Idempotente: em atualizações, não recria nem altera credenciais.
+# Credenciais: usa HUBCENTRAL_ADMIN_EMAIL/PASSWORD do ambiente; se ausentes,
+# gera uma senha aleatória e a exibe uma única vez.
+bootstrap_admin() {
+  # Verifica se já existe um superadmin (ignora falha silenciosamente).
+  local existing
+  existing="$(
+    cd "$INSTALL_DIR" && set -a && . ./.env && set +a && \
+    node -e "import('pg').then(async ({default:{Pool}})=>{const p=new Pool({connectionString:process.env.DATABASE_URL});try{const r=await p.query(\"SELECT 1 FROM core.users WHERE role='superadmin' LIMIT 1\");process.stdout.write(String(r.rowCount));}catch(e){process.stdout.write('err');}finally{await p.end();}})" 2>/dev/null || echo "err"
+  )"
+
+  if [ "$existing" = "1" ]; then
+    log "SuperAdministrador já existe; bootstrap ignorado."
+    return
+  fi
+  if [ "$existing" = "err" ]; then
+    warn "Não foi possível verificar o SuperAdministrador; pulando bootstrap. Rode manualmente: (cd $INSTALL_DIR && npm run create-admin -- <email> <senha>)"
+    return
+  fi
+
+  local admin_email admin_pass generated=0
+  admin_email="${HUBCENTRAL_ADMIN_EMAIL:-admin@hubcentral.local}"
+  if [ -n "${HUBCENTRAL_ADMIN_PASSWORD:-}" ]; then
+    admin_pass="$HUBCENTRAL_ADMIN_PASSWORD"
+  else
+    admin_pass="$(head -c 18 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 16)"
+    generated=1
+  fi
+
+  log "Criando SuperAdministrador inicial ($admin_email)..."
+  ( cd "$INSTALL_DIR" && set -a && . ./.env && set +a && \
+    node dist/cli/create-admin.js "$admin_email" "$admin_pass" "Super Administrador" )
+
+  if [ "$generated" -eq 1 ]; then
+    printf '\033[1;32m[hubcentral]\033[0m ================ CREDENCIAIS DO SUPERADMIN ================\n'
+    printf '\033[1;32m[hubcentral]\033[0m  E-mail: %s\n' "$admin_email"
+    printf '\033[1;32m[hubcentral]\033[0m  Senha : %s\n' "$admin_pass"
+    printf '\033[1;32m[hubcentral]\033[0m  Guarde agora: esta senha NÃO será exibida novamente.\n'
+    printf '\033[1;32m[hubcentral]\033[0m ==========================================================\n'
+  fi
+}
+
 # ----- Fluxo principal -----
 
 main() {
@@ -320,6 +365,7 @@ main() {
   build_app
   build_frontend
   run_migrations
+  bootstrap_admin
   set_ownership
   install_service
   install_nginx

@@ -33,6 +33,19 @@ const CAMPAIGN_COLUMNS =
   "id, name, tags, channels, status, subject, body_type, body_text, body_html";
 
 /**
+ * Lista as campanhas, mais recentes primeiro.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @returns Lista de campanhas.
+ */
+export async function listCampaigns(client: PoolClient): Promise<Campaign[]> {
+  const { rows } = await client.query<Campaign>(
+    `SELECT ${CAMPAIGN_COLUMNS} FROM mod_crm.campaigns ORDER BY created_at DESC`,
+  );
+  return rows;
+}
+
+/**
  * Cria uma campanha. Os corpos text e html são armazenados separadamente e
  * preservados independentemente (§6.3).
  *

@@ -59,3 +59,71 @@ export interface TimelineEntry {
   user_name: string | null;
   timestamp: string;
 }
+
+/** Item de lista configurável do CRM. */
+export interface ListItem {
+  id: string;
+  type: string;
+  value: string;
+  active: boolean;
+}
+
+/** Configuração de SLA de uma etapa. */
+export interface SlaConfig {
+  column_id: string;
+  value: number;
+  unit: "minutes" | "hours" | "days";
+}
+
+/** Campanha do CRM. */
+export interface Campaign {
+  id: string;
+  name: string;
+  tags: string[];
+  channels: string[];
+  status: "draft" | "active" | "paused";
+  subject: string | null;
+  body_type: "text" | "html";
+  body_text: string | null;
+  body_html: string | null;
+}
+
+/** Mensagem da mensageria interna. */
+export interface Message {
+  id: string;
+  from_user_id: string | null;
+  from_user_name: string | null;
+  conversation_id: string;
+  text: string;
+  type: "message" | "sla_alert" | "system";
+  lead_id: string | null;
+  timestamp: string;
+}
+
+/** Relatório de fechamentos do mês. */
+export interface ClosingsReport {
+  won: number;
+  lost: number;
+  total_activation: number;
+  total_monthly: number;
+}
+
+/** Relatório de cumprimento de SLA. */
+export interface SlaReport {
+  overdue: number;
+  on_time: number;
+}
+
+/** Item de performance por vendedor. */
+export interface PerformanceRow {
+  assigned_to: string | null;
+  total: number;
+  won: number;
+  lost: number;
+}
+
+/** Item de motivos de perda. */
+export interface LossReasonRow {
+  loss_reason: string | null;
+  count: number;
+}

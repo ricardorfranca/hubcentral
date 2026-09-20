@@ -2,6 +2,15 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.3.0] - 2026-09-19
+
+### Adicionado
+
+- **Bootstrap do SuperAdministrador**: CLI `create-admin` (idempotente) que cria/promove o usuário superadmin, define a senha e concede todos os namespaces RBAC. Integrado ao `install.sh` (credenciais por ambiente ou senha gerada e exibida uma única vez).
+- **Catálogo de namespaces RBAC** do núcleo e do CRM (`core/iam/namespaces.ts`).
+- **Telas do CRM no frontend**: Campanhas (listar/criar/disparar), Relatórios (fechamentos, SLA, performance, motivos de perda), Conversas (canal da equipe) e Configurações (listas configuráveis + SLA por etapa), cada uma protegida por seu namespace.
+- **Endpoint `GET /api/crm/campaigns`** e cliente de API tipado para os recursos adicionais do CRM.
+
 ## [0.2.0] - 2026-09-19
 
 ### Adicionado

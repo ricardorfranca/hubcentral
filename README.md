@@ -188,6 +188,22 @@ curl -sSL https://raw.githubusercontent.com/ricardorfranca/hubcentral/main/scrip
 5. Roda `npm ci`, `npm run build` e aplica as migrations.
 6. Instala e (re)inicia um serviço **systemd** (`hubcentral.service`) com restart automático.
 7. Compila o **frontend** e instala/configura o **nginx** para servir o portal web (porta 80) com reverse proxy de `/api`.
+8. Cria o **SuperAdministrador** inicial (apenas na primeira instalação).
+
+### Primeiro acesso (SuperAdministrador)
+
+Na primeira instalação, o script cria um SuperAdministrador e concede todas as permissões. Você pode definir as credenciais por ambiente:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/ricardorfranca/hubcentral/main/scripts/install.sh \
+  | sudo HUBCENTRAL_ADMIN_EMAIL="voce@empresa.com" HUBCENTRAL_ADMIN_PASSWORD="suaSenhaForte" sh
+```
+
+Se não forem informadas, o script gera uma senha aleatória e a **exibe uma única vez** ao final da instalação. Em atualizações, o SuperAdministrador não é recriado. Para criar/reset manualmente:
+
+```bash
+cd /opt/hubcentral && sudo npm run create-admin -- "email@empresa.com" "senha"
+```
 
 ### Banco de dados
 
@@ -222,7 +238,7 @@ systemctl restart hubcentral     # reiniciar
 
 ## Frontend
 
-O portal web é uma SPA em **React + TypeScript + Vite + Material UI**, em `frontend/`. É uma base consolidada e extensível: cada módulo registra suas telas, menus e permissões de forma declarativa (`ModuleDefinition`), do mesmo modo que o backend usa o Contrato de Módulos. Inclui autenticação (login e primeiro acesso), tema white-label e o módulo CRM (pipeline Kanban).
+O portal web é uma SPA em **React + TypeScript + Vite + Material UI**, em `frontend/`. É uma base consolidada e extensível: cada módulo registra suas telas, menus e permissões de forma declarativa (`ModuleDefinition`), do mesmo modo que o backend usa o Contrato de Módulos. Inclui autenticação (login e primeiro acesso), tema white-label e o módulo CRM completo: **pipeline Kanban**, **campanhas**, **relatórios**, **conversas** e **configurações** (listas e SLA por etapa).
 
 ```bash
 cd frontend
