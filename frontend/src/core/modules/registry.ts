@@ -9,6 +9,7 @@
 
 import type { ModuleDefinition } from "./types.js";
 import { crmModule } from "../../modules/crm/module.js";
+import { adminModule } from "../../modules/admin/module.js";
 
 /** Módulos registrados na aplicação. */
-export const MODULE_REGISTRY: ModuleDefinition[] = [crmModule];
+export const MODULE_REGISTRY: ModuleDefinition[] = [crmModule, adminModule];

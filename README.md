@@ -248,6 +248,8 @@ npm run build    # gera frontend/dist (servido pelo nginx em produção)
 npm test         # testes (Vitest + Testing Library)
 ```
 
+Além do CRM, o portal inclui o módulo de **Administração** (gestão de usuários): convite, papéis, ativação/desativação e edição de permissões RBAC por usuário — visível para quem tem `core:usuarios:gerenciar`.
+
 Estrutura: `src/core` (api, auth, branding, rbac, registro de módulos) e `src/modules/<modulo>` (telas de cada módulo). Adicionar um módulo = criar seu `ModuleDefinition` e registrá-lo em `src/core/modules/registry.ts` — o Shell não muda.
 
 O portal é servido em produção pelo **nginx** (config em `deploy/nginx/hubcentral.conf`), que entrega a SPA e faz reverse proxy de `/api` para o backend. O `install.sh` compila o frontend e configura o nginx automaticamente.

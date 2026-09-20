@@ -2,6 +2,13 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.4.0] - 2026-09-19
+
+### Adicionado
+
+- **Gestão de usuários (backend)**: rotas `/api/iam/users` (listar, convidar, reenviar convite, alterar papel/status, ler e substituir permissões) e `/api/iam/namespaces`, todas protegidas por `core:usuarios:gerenciar`. Serviços `listUsers`, `setUserRole`, `setUserStatus`, `revokeNamespace` e `setUserPermissions` (diff-based), com auditoria.
+- **Módulo de Administração (frontend)**: tela de usuários com lista, convite, alteração de papel/status e editor de permissões RBAC agrupadas por módulo. Registrado como módulo do portal, protegido por `core:usuarios:gerenciar`.
+
 ## [0.3.0] - 2026-09-19
 
 ### Adicionado

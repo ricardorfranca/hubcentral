@@ -12,6 +12,7 @@ import { mapError } from "./error-mapping.js";
 import { registerContactRoutes } from "./routes/contacts.js";
 import { registerCrmRoutes } from "./routes/crm.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerUserRoutes } from "./routes/users.js";
 import { registerCrmExtraRoutes, registerCrmMessagingRoutes } from "./routes/crm-extra.js";
 import { validateSession } from "../core/iam/session-service.js";
 
@@ -76,6 +77,7 @@ export function buildApp(pool: Pool): FastifyInstance {
   app.get("/health", async () => ({ status: "ok" }));
 
   registerAuthRoutes(app, pool);
+  registerUserRoutes(app, pool);
   registerContactRoutes(app, pool);
   registerCrmRoutes(app, pool);
   registerCrmExtraRoutes(app, pool);

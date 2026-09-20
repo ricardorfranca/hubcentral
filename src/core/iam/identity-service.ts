@@ -49,6 +49,77 @@ export async function getUserById(client: PoolClient, userId: string): Promise<I
 }
 
 /**
+ * Lista todos os usuários (dados seguros), ordenados por e-mail.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @returns Lista de usuários.
+ */
+export async function listUsers(client: PoolClient): Promise<IamUser[]> {
+  const { rows } = await client.query<IamUser>(
+    `SELECT ${USER_COLUMNS} FROM core.users ORDER BY email`,
+  );
+  return rows;
+}
+
+/**
+ * Altera o papel (nível de acesso) de um usuário (Req §2.2). Auditado.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param userId - `user_id` alvo.
+ * @param role - Novo papel.
+ * @param actorUserId - Autor da alteração.
+ * @throws {DomainError} `IAM_USER_NOT_FOUND` se o usuário não existe.
+ */
+export async function setUserRole(
+  client: PoolClient,
+  userId: string,
+  role: UserRole,
+  actorUserId: string | null = null,
+): Promise<void> {
+  const before = await getUserById(client, userId);
+  if (!before) {
+    throw new DomainError(ErrorCode.IAM_USER_NOT_FOUND, "Usuário não encontrado.", { user_id: userId });
+  }
+  await client.query(`UPDATE core.users SET role = $2 WHERE id = $1`, [userId, role]);
+  await auditLog(client, {
+    userId: actorUserId,
+    module: "core",
+    action: "IAM_PAPEL_ALTERADO",
+    payloadBefore: { role: before.role },
+    payloadAfter: { role },
+  });
+}
+
+/**
+ * Ativa ou desativa um usuário. Auditado.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param userId - `user_id` alvo.
+ * @param status - Novo status.
+ * @param actorUserId - Autor da alteração.
+ * @throws {DomainError} `IAM_USER_NOT_FOUND` se o usuário não existe.
+ */
+export async function setUserStatus(
+  client: PoolClient,
+  userId: string,
+  status: "active" | "disabled",
+  actorUserId: string | null = null,
+): Promise<void> {
+  const before = await getUserById(client, userId);
+  if (!before) {
+    throw new DomainError(ErrorCode.IAM_USER_NOT_FOUND, "Usuário não encontrado.", { user_id: userId });
+  }
+  await client.query(`UPDATE core.users SET status = $2 WHERE id = $1`, [userId, status]);
+  await auditLog(client, {
+    userId: actorUserId,
+    module: "core",
+    action: "IAM_STATUS_ALTERADO",
+    payloadBefore: { status: before.status },
+    payloadAfter: { status },
+  });
+}
+
+/**
  * Provisiona (convida) um novo usuário com senha temporária e `password_set`
  * false, exigindo definição de nova senha no primeiro acesso (§5.6).
  *

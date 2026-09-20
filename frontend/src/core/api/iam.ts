@@ -1,0 +1,54 @@
+/**
+ * @file iam.ts
+ * @module core/api
+ *
+ * Funções tipadas dos endpoints de administração de usuários (IAM).
+ */
+
+import { request } from "./client.js";
+import type { UserRole } from "./types.js";
+
+/** Usuário na administração. */
+export interface AdminUser {
+  id: string;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  status: "active" | "disabled";
+  password_set: boolean;
+}
+
+/** Lista o catálogo de namespaces RBAC disponíveis. */
+export function listNamespaces(): Promise<string[]> {
+  return request<{ namespaces: string[] }>("/api/iam/namespaces").then((r) => r.namespaces);
+}
+
+/** Lista os usuários. */
+export function listUsers(): Promise<AdminUser[]> {
+  return request<AdminUser[]>("/api/iam/users");
+}
+
+/** Convida um novo usuário. */
+export function inviteUser(email: string, fullName: string, role: UserRole): Promise<AdminUser> {
+  return request<AdminUser>("/api/iam/users", { method: "POST", body: { email, full_name: fullName, role } });
+}
+
+/** Reenvia o convite de um usuário. */
+export function resendInvite(id: string): Promise<void> {
+  return request<void>(`/api/iam/users/${id}/resend`, { method: "POST" });
+}
+
+/** Altera papel e/ou status de um usuário. */
+export function updateUser(id: string, patch: { role?: UserRole; status?: "active" | "disabled" }): Promise<AdminUser> {
+  return request<AdminUser>(`/api/iam/users/${id}`, { method: "PATCH", body: patch });
+}
+
+/** Lê as permissões de um usuário. */
+export function getUserPermissions(id: string): Promise<string[]> {
+  return request<{ permissions: string[] }>(`/api/iam/users/${id}/permissions`).then((r) => r.permissions);
+}
+
+/** Substitui o conjunto de permissões de um usuário. */
+export function setUserPermissions(id: string, permissions: string[]): Promise<void> {
+  return request<void>(`/api/iam/users/${id}/permissions`, { method: "PUT", body: { permissions } });
+}

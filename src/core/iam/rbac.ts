@@ -30,6 +30,47 @@ export async function grantNamespace(
 }
 
 /**
+ * Revoga um namespace RBAC de um usuário. Idempotente.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param userId - `user_id` do usuário.
+ * @param namespace - Namespace a revogar.
+ */
+export async function revokeNamespace(
+  client: PoolClient,
+  userId: string,
+  namespace: string,
+): Promise<void> {
+  await client.query(
+    `DELETE FROM core.user_permissions WHERE user_id = $1 AND namespace = $2`,
+    [userId, namespace],
+  );
+}
+
+/**
+ * Substitui o conjunto de namespaces de um usuário pelo conjunto informado
+ * (concede os que faltam, revoga os que sobram).
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param userId - `user_id` do usuário.
+ * @param namespaces - Conjunto desejado de namespaces.
+ */
+export async function setUserPermissions(
+  client: PoolClient,
+  userId: string,
+  namespaces: readonly string[],
+): Promise<void> {
+  const desired = new Set(namespaces);
+  const current = new Set(await listUserPermissions(client, userId));
+  for (const ns of desired) {
+    if (!current.has(ns)) await grantNamespace(client, userId, ns);
+  }
+  for (const ns of current) {
+    if (!desired.has(ns)) await revokeNamespace(client, userId, ns);
+  }
+}
+
+/**
  * Lista todos os namespaces RBAC concedidos a um usuário.
  *
  * @param client - Cliente PostgreSQL.
