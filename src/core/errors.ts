@@ -131,6 +131,22 @@ export const ErrorCode = {
   CRM_OPP_NOT_FOUND: "CRM_OPP_NOT_FOUND",
   /** Conta não encontrada. */
   CRM_ACCOUNT_NOT_FOUND: "CRM_ACCOUNT_NOT_FOUND",
+  /** Parâmetro de configuração inexistente na Central de Configurações. */
+  SETTING_NOT_FOUND: "SETTING_NOT_FOUND",
+  /** Notificação não encontrada. */
+  NOTIFICATION_NOT_FOUND: "NOTIFICATION_NOT_FOUND",
+  /** Acesso negado a um projeto do qual o usuário não participa (Projetos). */
+  PROJ_ACCESS_DENIED: "PROJ_ACCESS_DENIED",
+  /** Projeto não encontrado. */
+  PROJ_NOT_FOUND: "PROJ_NOT_FOUND",
+  /** Tarefa não encontrada. */
+  PROJ_TASK_NOT_FOUND: "PROJ_TASK_NOT_FOUND",
+  /** Operação bloqueada porque o projeto está arquivado. */
+  PROJ_ARCHIVED: "PROJ_ARCHIVED",
+  /** Anexo inválido (tamanho/tipo fora dos limites). */
+  PROJ_ATTACHMENT_INVALID: "PROJ_ATTACHMENT_INVALID",
+  /** Anexo não encontrado. */
+  PROJ_ATTACHMENT_NOT_FOUND: "PROJ_ATTACHMENT_NOT_FOUND",
 } as const;
 
 /** União dos valores de {@link ErrorCode}. */
