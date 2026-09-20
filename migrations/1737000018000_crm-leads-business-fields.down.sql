@@ -1,0 +1,10 @@
+ALTER TABLE mod_crm.leads
+  DROP COLUMN IF EXISTS discard_type,
+  DROP COLUMN IF EXISTS loss_reason,
+  DROP COLUMN IF EXISTS sla_history,
+  DROP COLUMN IF EXISTS sla_deadline,
+  DROP COLUMN IF EXISTS notes,
+  DROP COLUMN IF EXISTS tags,
+  DROP COLUMN IF EXISTS partner,
+  DROP COLUMN IF EXISTS product,
+  DROP COLUMN IF EXISTS source;

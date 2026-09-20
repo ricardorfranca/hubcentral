@@ -1,0 +1,7 @@
+{
+  "migrationsTable": "core_pgmigrations",
+  "dir": "migrations",
+  "direction": "up",
+  "count": "Infinity",
+  "checkOrder": true
+}
