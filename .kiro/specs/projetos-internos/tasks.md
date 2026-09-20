@@ -29,9 +29,9 @@ Plano incremental. Cada tarefa referencia os requisitos que atende. Backend com 
 
 ## Fase 4 — Módulo Projetos: anexos e rotas HTTP
 
-- [ ] 4.1 Adicionar `@fastify/multipart`; registrar no `app.ts`. _Req 7_
-- [ ] 4.2 `attachment-service.ts`: saveAttachment (grava metadados), listAttachments, getAttachment (download), deleteAttachment (remove arquivo + metadados; audita). Nome seguro por UUID; validação lê limites de `core.settings` (`getSettingInt`/`getSettingList`), env como fallback. Escrita atômica (temp + rename). Testes: rejeição por tamanho/tipo, nome seguro, exclusão remove arquivo. _Req 7, 13_
-- [ ] 4.3 `src/http/routes/projetos.ts`: todas as rotas do design (projetos, membros, tarefas, move, assignees, comments, attachments upload/download/delete) com `authorize` + `assertProjectAccess`. Registrar em `app.ts`. Testes de rota (RBAC nega sem namespace; nega acesso a projeto alheio mesmo com namespace). _Req 1–7, 9, 12_
+- [x] 4.1 Adicionar `@fastify/multipart`; registrar no `app.ts`. _Req 7_
+- [x] 4.2 `attachment-service.ts`: saveAttachment (grava metadados), listAttachments, getAttachment (download), deleteAttachment (remove arquivo + metadados; audita). Nome seguro por UUID; validação lê limites de `core.settings` (`getSettingInt`/`getSettingList`), env como fallback. Escrita atômica (temp + rename). Testes: rejeição por tamanho/tipo, nome seguro, exclusão remove arquivo. _Req 7, 13_
+- [x] 4.3 `src/http/routes/projetos.ts`: todas as rotas do design (projetos, membros, tarefas, move, assignees, comments, attachments upload/download/delete) com `authorize` + `assertProjectAccess`. Registrar em `app.ts`. Testes de rota (RBAC nega sem namespace; nega acesso a projeto alheio mesmo com namespace). _Req 1–7, 9, 12_
 
 ## Fase 5 — Frontend: núcleo (notificações, settings, menu agrupado)
 

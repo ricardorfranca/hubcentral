@@ -7,8 +7,10 @@
  */
 
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
+import multipart from "@fastify/multipart";
 import type { Pool } from "pg";
 import { mapError } from "./error-mapping.js";
+import { registerProjetosRoutes } from "./routes/projetos.js";
 import { registerContactRoutes } from "./routes/contacts.js";
 import { registerCrmRoutes } from "./routes/crm.js";
 import { registerAuthRoutes } from "./routes/auth.js";
@@ -65,6 +67,12 @@ async function resolveUser(pool: Pool, request: FastifyRequest): Promise<string 
 export function buildApp(pool: Pool): FastifyInstance {
   const app = Fastify({ logger: false });
 
+  // Upload de anexos (multipart). O limite de tamanho efetivo é validado no
+  // serviço a partir da Central de Configurações; aqui usamos um teto de guarda.
+  void app.register(multipart, {
+    limits: { fileSize: Number(process.env.UPLOADS_MAX_BYTES ?? 26_214_400) },
+  });
+
   // Resolve o usuário autenticado antes de cada handler.
   app.decorateRequest("userId", null);
   app.addHook("preHandler", async (request) => {
@@ -88,6 +96,7 @@ export function buildApp(pool: Pool): FastifyInstance {
   registerCrmSalesRoutes(app, pool);
   registerNotificationRoutes(app, pool);
   registerSettingsRoutes(app, pool);
+  registerProjetosRoutes(app, pool);
 
   return app;
 }
