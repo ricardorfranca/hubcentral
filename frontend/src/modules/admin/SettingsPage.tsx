@@ -11,11 +11,13 @@ import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Typography, Card, CardContent, Stack, TextField, Button, Switch, FormControlLabel,
-  CircularProgress, Divider,
+  CircularProgress, Divider, Alert,
 } from "@mui/material";
-import { listSettings, updateSetting, type Setting } from "../../core/api/settings.js";
+import { listSettings, updateSetting, testSmtp, type Setting } from "../../core/api/settings.js";
 import { uploadLogo } from "../../core/api/branding.js";
+import { downloadBackup, restoreBackup } from "../../core/api/backup.js";
 import { useBrandingStore } from "../../core/branding/branding-store.js";
+import { useCan } from "../../core/rbac/can.js";
 
 /** Rótulos amigáveis por módulo. */
 const MODULE_LABELS: Record<string, string> = {
@@ -30,6 +32,7 @@ const MODULE_LABELS: Record<string, string> = {
  * @returns A tela de configurações.
  */
 export function SettingsPage(): JSX.Element {
+  const can = useCan();
   const { data: settings, isLoading } = useQuery({ queryKey: ["settings"], queryFn: () => listSettings() });
 
   // Agrupa por módulo.
@@ -59,9 +62,11 @@ export function SettingsPage(): JSX.Element {
               <Stack spacing={2}>
                 {items.map((s) => <SettingEditor key={s.key} setting={s} />)}
               </Stack>
+              {items.some((s) => s.key.startsWith("core.smtp.")) && <SmtpTestPanel />}
             </CardContent>
           </Card>
         ))}
+        {can("core:backup:gerenciar") && <BackupPanel />}
       </Stack>
     </Box>
   );
@@ -95,6 +100,7 @@ function SettingEditor({ setting }: { setting: Setting }): JSX.Element {
   const isBool = setting.value_type === "bool";
   const isColor = setting.key.endsWith("_color");
   const isLogo = setting.key === "core.branding.logo_url";
+  const isSecret = setting.key.endsWith(".password");
   const dirty = value !== effective;
   const setBranding = useBrandingStore((s) => s.setBranding);
   const persist = (v: string): void => {
@@ -152,10 +158,11 @@ function SettingEditor({ setting }: { setting: Setting }): JSX.Element {
             <TextField
               size="small"
               fullWidth
-              type={setting.value_type === "int" ? "number" : "text"}
+              type={isSecret ? "password" : setting.value_type === "int" ? "number" : "text"}
+              {...(isSecret ? { autoComplete: "new-password" } : {})}
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              helperText={setting.value_type === "csv" ? "Separe os valores por vírgula." : (isLogo ? "URL do logotipo, ou envie um arquivo." : undefined)}
+              helperText={setting.value_type === "csv" ? "Separe os valores por vírgula." : (isLogo ? "URL do logotipo, ou envie um arquivo." : "")}
             />
             {isLogo && (
               <Button variant="outlined" component="label">
@@ -174,5 +181,123 @@ function SettingEditor({ setting }: { setting: Setting }): JSX.Element {
         )}
       </Stack>
     </Box>
+  );
+}
+
+/** Painel de teste de conexão SMTP (com envio opcional de e-mail de teste). */
+function SmtpTestPanel(): JSX.Element {
+  const [testTo, setTestTo] = useState("");
+  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const test = useMutation({
+    mutationFn: () => testSmtp(testTo.trim() || undefined),
+    onSuccess: (r) => setResult({ ok: true, msg: r.sent ? "Conexão OK e e-mail de teste enviado." : "Conexão SMTP verificada com sucesso." }),
+    onError: (e) => setResult({ ok: false, msg: e instanceof Error ? e.message : "Falha no teste SMTP." }),
+  });
+
+  return (
+    <Box sx={{ mt: 2 }}>
+      <Divider sx={{ mb: 2 }} />
+      <Typography variant="subtitle2" gutterBottom>Teste de conexão SMTP</Typography>
+      {result && <Alert severity={result.ok ? "success" : "error"} sx={{ mb: 1 }} onClose={() => setResult(null)}>{result.msg}</Alert>}
+      <Stack direction="row" spacing={1} alignItems="center">
+        <TextField
+          size="small"
+          fullWidth
+          type="email"
+          label="Enviar e-mail de teste para (opcional)"
+          value={testTo}
+          onChange={(e) => setTestTo(e.target.value)}
+        />
+        <Button variant="outlined" onClick={() => test.mutate()} disabled={test.isPending}>
+          {test.isPending ? "Testando…" : "Testar"}
+        </Button>
+      </Stack>
+    </Box>
+  );
+}
+
+/** Painel de backup/restore (somente superadmin com core:backup:gerenciar). */
+function BackupPanel(): JSX.Element {
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState("");
+  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  async function doBackup(): Promise<void> {
+    setBusy(true);
+    setResult(null);
+    try {
+      await downloadBackup();
+      setResult({ ok: true, msg: "Backup gerado e baixado." });
+    } catch (e) {
+      setResult({ ok: false, msg: e instanceof Error ? e.message : "Falha ao gerar backup." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doRestore(file: File): Promise<void> {
+    if (confirm !== "RESTAURAR") {
+      setResult({ ok: false, msg: 'Digite RESTAURAR para confirmar antes de selecionar o arquivo.' });
+      return;
+    }
+    setBusy(true);
+    setResult(null);
+    try {
+      await restoreBackup(file);
+      setResult({ ok: true, msg: "Restore concluído. Recarregue a página." });
+    } catch (e) {
+      setResult({ ok: false, msg: e instanceof Error ? e.message : "Falha ao restaurar." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Typography variant="h6" gutterBottom>Backup e restauração</Typography>
+        <Divider sx={{ mb: 2 }} />
+        {result && <Alert severity={result.ok ? "success" : "error"} sx={{ mb: 2 }} onClose={() => setResult(null)}>{result.msg}</Alert>}
+
+        <Stack spacing={2}>
+          <Box>
+            <Typography variant="subtitle2">Backup</Typography>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+              Gera um pacote com o banco de dados e os anexos, e baixa no seu navegador.
+            </Typography>
+            <Button variant="contained" onClick={doBackup} disabled={busy}>
+              {busy ? "Processando…" : "Gerar backup"}
+            </Button>
+          </Box>
+
+          <Divider />
+
+          <Box>
+            <Typography variant="subtitle2" color="error">Restauração (destrutivo)</Typography>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+              Substitui TODO o banco de dados e os anexos pelo conteúdo do pacote. Esta ação não pode ser desfeita.
+              Digite <strong>RESTAURAR</strong> e selecione o arquivo de backup.
+            </Typography>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <TextField
+                size="small"
+                placeholder="Digite RESTAURAR"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+              />
+              <Button variant="outlined" color="error" component="label" disabled={busy || confirm !== "RESTAURAR"}>
+                Selecionar backup e restaurar
+                <input
+                  type="file"
+                  hidden
+                  accept=".gz,.tar.gz,application/gzip"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void doRestore(f); e.target.value = ""; }}
+                />
+              </Button>
+            </Stack>
+          </Box>
+        </Stack>
+      </CardContent>
+    </Card>
   );
 }

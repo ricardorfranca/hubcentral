@@ -19,6 +19,7 @@ export const CORE_NAMESPACES: readonly string[] = [
   "core:modulos:registrar",
   "core:usuarios:gerenciar",
   "core:config:gerenciar",
+  "core:backup:gerenciar",
 ];
 
 /** Namespaces do módulo CRM (§3 do ModuloCRM). */

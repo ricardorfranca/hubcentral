@@ -135,6 +135,12 @@ export const ErrorCode = {
   SETTING_NOT_FOUND: "SETTING_NOT_FOUND",
   /** Notificação não encontrada. */
   NOTIFICATION_NOT_FOUND: "NOTIFICATION_NOT_FOUND",
+  /** SMTP não configurado (host/remetente ausentes). */
+  SMTP_NOT_CONFIGURED: "SMTP_NOT_CONFIGURED",
+  /** Falha ao conectar/enviar via SMTP. */
+  SMTP_ERROR: "SMTP_ERROR",
+  /** Falha em operação de backup/restore. */
+  BACKUP_ERROR: "BACKUP_ERROR",
   /** Acesso negado a um projeto do qual o usuário não participa (Projetos). */
   PROJ_ACCESS_DENIED: "PROJ_ACCESS_DENIED",
   /** Projeto não encontrado. */

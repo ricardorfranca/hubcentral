@@ -31,3 +31,11 @@ export function listSettings(module?: string): Promise<Setting[]> {
 export function updateSetting(key: string, value: string | null): Promise<Setting> {
   return request<Setting>(`/api/settings/${encodeURIComponent(key)}`, { method: "PATCH", body: { value } });
 }
+
+/** Testa a conexão SMTP; se `testTo` for informado, envia um e-mail de teste. */
+export function testSmtp(testTo?: string): Promise<{ ok: boolean; sent: boolean }> {
+  return request<{ ok: boolean; sent: boolean }>("/api/settings/smtp/test", {
+    method: "POST",
+    body: testTo ? { test_to: testTo } : {},
+  });
+}

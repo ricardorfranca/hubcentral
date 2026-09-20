@@ -12,6 +12,7 @@ import type { Pool } from "pg";
 import { withTransaction } from "../../core/db/pool.js";
 import { authorize } from "../../core/iam/rbac.js";
 import { listSettings, setSetting, resolveValue } from "../../core/settings/settings-service.js";
+import { verifyConnection, sendEmail } from "../../core/email/email-service.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -68,6 +69,24 @@ export function registerSettingsRoutes(app: FastifyInstance, pool: Pool): void {
     } catch {
       return reply.status(404).send({ code: "SETTING_NOT_FOUND", message: "Arquivo não encontrado.", details: {} });
     }
+  });
+
+  // Testa a conexão SMTP; opcionalmente envia um e-mail de teste.
+  app.post<{ Body: { test_to?: string } }>("/api/settings/smtp/test", async (request, reply) => {
+    const result = await withTransaction(pool, async (c) => {
+      await authorize(c, request.userId, CONFIG_NS);
+      await verifyConnection(c);
+      if (request.body?.test_to) {
+        await sendEmail(c, {
+          to: request.body.test_to,
+          subject: "HUB Central — teste de e-mail",
+          text: "Este é um e-mail de teste enviado pela configuração SMTP do HUB Central.",
+        });
+        return { ok: true, sent: true };
+      }
+      return { ok: true, sent: false };
+    });
+    return reply.send(result);
   });
 
   // Upload do logotipo: salva o arquivo em disco e define core.branding.logo_url.

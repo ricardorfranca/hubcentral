@@ -15,6 +15,8 @@ import {
 } from "../../core/iam/identity-service.js";
 import { authorize, listUserPermissions, setUserPermissions } from "../../core/iam/rbac.js";
 import { ALL_NAMESPACES } from "../../core/iam/namespaces.js";
+import { TEMP_PASSWORD } from "../../core/iam/identity-service.js";
+import { sendEmail } from "../../core/email/email-service.js";
 
 /** Permissão exigida para administrar usuários. */
 const ADMIN_NS = "core:usuarios:gerenciar";
@@ -48,6 +50,22 @@ export function registerUserRoutes(app: FastifyInstance, pool: Pool): void {
       const user = await withTransaction(pool, async (c) => {
         await authorize(c, request.userId, ADMIN_NS);
         return inviteUser(c, request.body, request.userId);
+      });
+      // Envia o e-mail de convite (best-effort: não falha o convite se o SMTP
+      // não estiver configurado ou indisponível).
+      await withTransaction(pool, async (c) => {
+        try {
+          await sendEmail(c, {
+            to: user.email,
+            subject: "Convite para o HUB Central",
+            text:
+              `Olá, ${user.full_name}.\n\n` +
+              `Você foi convidado para o HUB Central. Acesse o portal e use a senha temporária "${TEMP_PASSWORD}" ` +
+              `no primeiro acesso para definir sua senha definitiva.\n`,
+          });
+        } catch {
+          // SMTP não configurado/indisponível: convite segue válido.
+        }
       });
       return reply.status(201).send(user);
     },
