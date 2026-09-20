@@ -94,7 +94,7 @@ export function OpportunitiesBoard(): JSX.Element {
               onDrop={(e) => onDrop(stage.id, e)}
             >
               <Stack direction="row" justifyContent="space-between" sx={{ px: 1, py: 0.5 }}>
-                <Typography variant="subtitle2">
+                <Typography variant="subtitle2" color="text.primary">
                   {stage.label} ({items.length})
                 </Typography>
                 <Chip size="small" label={`${stage.probability}%`} />
@@ -108,17 +108,23 @@ export function OpportunitiesBoard(): JSX.Element {
                     key={o.id}
                     draggable={canMove}
                     onDragStart={(e) => e.dataTransfer.setData("text/opp-id", o.id)}
-                    sx={{ cursor: canMove ? "grab" : "pointer" }}
+                    // Fundo e texto explicitamente derivados do tema para garantir
+                    // contraste em ambos os modos (o texto herda text.primary).
+                    sx={{
+                      cursor: canMove ? "grab" : "pointer",
+                      bgcolor: "background.paper",
+                      color: "text.primary",
+                    }}
                   >
                     <CardActionArea onClick={() => navigate(`/crm/oportunidades/${o.id}`)}>
                       <CardContent sx={{ py: 1.5 }}>
-                        <Typography variant="body2" fontWeight={600}>{o.name}</Typography>
+                        <Typography variant="body2" fontWeight={600} color="text.primary">{o.name}</Typography>
                         {o.account_name && (
                           <Typography variant="caption" display="block" color="text.secondary">
                             {o.account_name}
                           </Typography>
                         )}
-                        <Typography variant="caption" display="block">
+                        <Typography variant="caption" display="block" color="text.primary">
                           MRR {brl(o.mrr)} · ARR {brl(o.arr ?? Number(o.mrr) * 12)}
                         </Typography>
                         {o.qualification && (
