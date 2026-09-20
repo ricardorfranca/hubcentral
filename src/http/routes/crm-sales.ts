@@ -13,6 +13,10 @@ import {
   createOpportunity, listOpportunities, getOpportunity, moveStage, finalize,
   type Origin, type Qualification,
 } from "../../modules/crm/opportunity-service.js";
+import { listStages, updateStage } from "../../modules/crm/stage-service.js";
+import {
+  weightedForecast, newMrrArr, conversionByStage, pipelineByOrigin, pipelineByOwner,
+} from "../../modules/crm/forecast-service.js";
 
 /**
  * Registra as rotas de contas e oportunidades.
@@ -103,4 +107,36 @@ export function registerCrmSalesRoutes(app: FastifyInstance, pool: Pool): void {
       return reply.send(opp);
     },
   );
+
+  // --- Estágios (pipeline configurável) ---
+  app.get("/api/crm/stages", async (_request, reply) => {
+    return reply.send(await withTransaction(pool, (c) => listStages(c)));
+  });
+
+  app.patch<{ Params: { id: string }; Body: { label?: string; probability?: number } }>(
+    "/api/crm/stages/:id",
+    async (request, reply) => {
+      const patch: { label?: string; probability?: number } = {};
+      if (request.body.label !== undefined) patch.label = request.body.label;
+      if (request.body.probability !== undefined) patch.probability = request.body.probability;
+      const stage = await withTransaction(pool, (c) => updateStage(c, request.params.id, patch));
+      if (!stage) return reply.status(404).send({ code: "CRM_STAGE_NOT_FOUND", message: "Estágio não encontrado.", details: {} });
+      return reply.send(stage);
+    },
+  );
+
+  // --- Forecast / dashboards de Receita Previsível ---
+  app.get("/api/crm/forecast", async (_request, reply) => {
+    const now = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth(), 1);
+    const to = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const data = await withTransaction(pool, async (c) => ({
+      weighted: await weightedForecast(c),
+      period: await newMrrArr(c, from, to),
+      by_stage: await conversionByStage(c),
+      by_origin: await pipelineByOrigin(c),
+      by_owner: await pipelineByOwner(c),
+    }));
+    return reply.send(data);
+  });
 }
