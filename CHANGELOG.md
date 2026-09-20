@@ -2,6 +2,14 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.1.1] - 2026-09-19
+
+### Adicionado
+
+- **Instalador Linux** (`scripts/install.sh`): instala ou atualiza o HUB Central via `curl -sSL <url> | sudo sh`. Foco em Debian/Ubuntu (apt), com suporte a dnf/yum. Instala Node.js 20, git, build tools e (opcionalmente) PostgreSQL; cria usuário de sistema, clona/atualiza em `/opt/hubcentral`, gera/preserva `.env`, aplica migrations e instala um serviço systemd (`hubcentral.service`).
+- **Script npm `start`**: `node dist/server.js`, usado pelo serviço systemd.
+- **Seção Implantação (Linux)** no README com instruções de instalação, atualização, banco local vs externo e operação via systemd.
+
 ## [0.1.0] - 2026-09-19
 
 ### Adicionado

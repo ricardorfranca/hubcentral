@@ -161,6 +161,64 @@ Autenticação por Bearer token de sessão (obtido no login). Rotas protegidas e
 | POST | `/api/crm/campaigns/:id/dispatch` | Disparar campanha |
 | GET | `/api/crm/reports/{closings,loss-reasons,performance,sla}` | Relatórios |
 
+## Implantação (Linux)
+
+O HUB Central inclui um instalador para servidores Linux (foco em Debian/Ubuntu; também tenta dnf/yum). O mesmo script **instala** numa máquina nova e **atualiza** uma instalação existente — é idempotente e preserva o `.env`.
+
+### Instalação rápida (one-liner)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/ricardorfranca/hubcentral/main/scripts/install.sh | sudo sh
+```
+
+> **Segurança:** `curl | sh` executa código com privilégios de root. Para revisar antes de rodar (recomendado):
+>
+> ```bash
+> curl -sSL https://raw.githubusercontent.com/ricardorfranca/hubcentral/main/scripts/install.sh -o install.sh
+> less install.sh   # inspecione
+> sudo sh install.sh
+> ```
+
+### O que o instalador faz
+
+1. Detecta o gerenciador de pacotes e instala dependências: **Node.js 20 LTS**, git, build tools e (opcionalmente) **PostgreSQL**.
+2. Cria o usuário de sistema `hubcentral` (sem shell) para rodar o serviço.
+3. Clona o repositório em `/opt/hubcentral` (ou atualiza, se já existir).
+4. Gera um `.env` inicial (na primeira vez) ou preserva o existente.
+5. Roda `npm ci`, `npm run build` e aplica as migrations.
+6. Instala e (re)inicia um serviço **systemd** (`hubcentral.service`) com restart automático.
+
+### Banco de dados
+
+- **Padrão (DB local):** se você não fornecer `DATABASE_URL`, o instalador instala o PostgreSQL, cria o banco `hub_central` e um usuário com senha aleatória, gravando a conexão no `.env`.
+- **DB externo (RDS, gerenciado):** forneça a URL e o Postgres local é ignorado:
+
+  ```bash
+  curl -sSL https://raw.githubusercontent.com/ricardorfranca/hubcentral/main/scripts/install.sh \
+    | sudo DATABASE_URL="postgres://user:senha@host:5432/hub_central" sh
+  ```
+
+### Variáveis do instalador
+
+| Variável | Default | Descrição |
+|----------|---------|-----------|
+| `DATABASE_URL` | (vazio) | Se definida, usa este banco e não instala Postgres local |
+| `HUBCENTRAL_REF` | `main` | Branch ou tag a instalar (ex.: `v0.1.0`) |
+| `INSTALL_DIR` | `/opt/hubcentral` | Diretório de instalação |
+
+### Atualizar uma instalação existente
+
+Basta rodar o mesmo comando de instalação novamente: o script faz `git pull`, reconstrói, aplica novas migrations e reinicia o serviço, mantendo o `.env`.
+
+### Operação (systemd)
+
+```bash
+systemctl status hubcentral      # estado do serviço
+journalctl -u hubcentral -f      # logs em tempo real
+systemctl restart hubcentral     # reiniciar
+```
+
+
 ## Módulos
 
 Documentação detalhada por área:
