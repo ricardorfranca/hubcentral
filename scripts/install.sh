@@ -161,6 +161,13 @@ create_service_user() {
 # ----- Código: clonar ou atualizar -----
 
 fetch_code() {
+  # O repositório pertence ao usuário 'hubcentral', mas o instalador roda como
+  # root. O Git recusa operar em repos de outro dono (CVE-2022-24765); marca-se
+  # o diretório como seguro para o root, de forma idempotente (sem duplicar).
+  if ! git config --global --get-all safe.directory 2>/dev/null | grep -qx "$INSTALL_DIR"; then
+    git config --global --add safe.directory "$INSTALL_DIR" 2>/dev/null || true
+  fi
+
   if [ -d "$INSTALL_DIR/.git" ]; then
     log "Atualizando código existente em $INSTALL_DIR (ref: $REF)..."
     git -C "$INSTALL_DIR" fetch --quiet --all --tags

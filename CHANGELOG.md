@@ -2,6 +2,12 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.4.2] - 2026-09-19
+
+### Corrigido
+
+- **Atualização via instalador em `/opt/hubcentral`**: o `git pull` falhava com "detected dubious ownership" ao atualizar, porque o repositório pertence ao usuário `hubcentral` e o instalador roda como root (proteção CVE-2022-24765 do Git). O `install.sh` passa a marcar o diretório como `safe.directory` para o root (idempotente) antes das operações git.
+
 ## [0.4.1] - 2026-09-19
 
 ### Corrigido
