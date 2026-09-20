@@ -86,9 +86,12 @@ export function OpportunitiesBoard(): JSX.Element {
                 minWidth: 280,
                 width: 280,
                 p: 1,
-                // Fundo sensível ao modo: claro no light, escuro no dark, para
-                // que o texto (text.primary/secondary) permaneça legível.
-                bgcolor: (theme) => (theme.palette.mode === "dark" ? "grey.900" : "grey.50"),
+                // Usa tokens semânticos (background.default/text.primary) que
+                // acompanham o modo REAL do tema, sem depender de um teste em
+                // palette.mode que pode divergir do CssBaseline. Assim a coluna
+                // nunca fica branca no dark com texto claro por cima.
+                bgcolor: "background.default",
+                color: "text.primary",
               }}
               onDragOver={(e) => canMove && e.preventDefault()}
               onDrop={(e) => onDrop(stage.id, e)}
