@@ -152,3 +152,76 @@ export async function sendManagerAlert(
     leadId,
   });
 }
+
+/** Resumo de uma conversa para a lista do usuário. */
+export interface ConversationSummary {
+  conversation_id: string;
+  last_text: string | null;
+  last_at: Date | null;
+  unread: number;
+}
+
+/**
+ * Lista as conversas do usuário: o canal da equipe (`group`) e todas as DMs de
+ * que ele participa, com a última mensagem e a contagem de não lidas (mensagens
+ * posteriores ao `last_read_at` do usuário, não enviadas por ele).
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param userId - `user_id` do usuário.
+ * @returns Conversas ordenadas pela última mensagem (mais recente primeiro).
+ */
+export async function listConversations(
+  client: PoolClient,
+  userId: string,
+): Promise<ConversationSummary[]> {
+  // Conversas relevantes: 'group' + DMs cujo id contém o user_id.
+  const dmLike = `dm_%${userId}%`;
+  const { rows } = await client.query<ConversationSummary>(
+    `WITH convs AS (
+       SELECT DISTINCT conversation_id
+       FROM mod_crm.messages
+       WHERE conversation_id = 'group' OR conversation_id LIKE $2
+     )
+     SELECT c.conversation_id,
+            lm.text AS last_text,
+            lm.ts   AS last_at,
+            COALESCE((
+              SELECT count(*) FROM mod_crm.messages m2
+              WHERE m2.conversation_id = c.conversation_id
+                AND (m2.from_user_id IS NULL OR m2.from_user_id <> $1)
+                AND m2."timestamp" > COALESCE(
+                  (SELECT last_read_at FROM mod_crm.message_reads r
+                   WHERE r.user_id = $1 AND r.conversation_id = c.conversation_id),
+                  'epoch'::timestamptz)
+            ), 0)::int AS unread
+     FROM convs c
+     LEFT JOIN LATERAL (
+       SELECT text, "timestamp" AS ts FROM mod_crm.messages m
+       WHERE m.conversation_id = c.conversation_id
+       ORDER BY m."timestamp" DESC LIMIT 1
+     ) lm ON true
+     ORDER BY lm.ts DESC NULLS LAST`,
+    [userId, dmLike],
+  );
+  return rows;
+}
+
+/**
+ * Marca uma conversa como lida para um usuário (atualiza `last_read_at`).
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param userId - `user_id` do usuário.
+ * @param conversationId - Conversa lida.
+ */
+export async function markRead(
+  client: PoolClient,
+  userId: string,
+  conversationId: string,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO mod_crm.message_reads (user_id, conversation_id, last_read_at)
+     VALUES ($1, $2, now())
+     ON CONFLICT (user_id, conversation_id) DO UPDATE SET last_read_at = now()`,
+    [userId, conversationId],
+  );
+}

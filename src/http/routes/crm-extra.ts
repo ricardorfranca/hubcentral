@@ -12,7 +12,10 @@ import { withTransaction } from "../../core/db/pool.js";
 import { addListItem, listItems, type ListType } from "../../modules/crm/list-service.js";
 import { setSlaConfig, getSlaConfig, type SlaUnit } from "../../modules/crm/sla-service.js";
 import { getTimeline } from "../../modules/crm/timeline-service.js";
-import { sendMessage, listMessages } from "../../modules/crm/message-service.js";
+import { sendMessage, listMessages, listConversations, markRead } from "../../modules/crm/message-service.js";
+import {
+  createActivity, completeActivity, listMyActivities, listByOpportunity, type ActivityType,
+} from "../../modules/crm/activity-service.js";
 import { createCampaign, dispatchCampaign, resolveAudience, listCampaigns, type CampaignChannel } from "../../modules/crm/campaign-service.js";
 import { closingsReport, lossReasonsReport, performanceReport, slaReport } from "../../modules/crm/report-service.js";
 
@@ -66,6 +69,27 @@ export function registerCrmExtraRoutes(app: FastifyInstance, pool: Pool): void {
  * @param pool - Pool de conexões.
  */
 export function registerCrmMessagingRoutes(app: FastifyInstance, pool: Pool): void {
+  // Mensageria: lista de conversas do usuário (equipe + DMs) com não lidas.
+  app.get("/api/crm/conversations", async (request, reply) => {
+    if (!request.userId) {
+      return reply.status(401).send({ code: "AUTH_UNAUTHORIZED", message: "Requisição não autenticada.", details: {} });
+    }
+    const convs = await withTransaction(pool, (c) => listConversations(c, request.userId!));
+    return reply.send(convs);
+  });
+
+  // Mensageria: marcar conversa como lida.
+  app.post<{ Params: { conversationId: string } }>(
+    "/api/crm/conversations/:conversationId/read",
+    async (request, reply) => {
+      if (!request.userId) {
+        return reply.status(401).send({ code: "AUTH_UNAUTHORIZED", message: "Requisição não autenticada.", details: {} });
+      }
+      await withTransaction(pool, (c) => markRead(c, request.userId!, request.params.conversationId));
+      return reply.status(204).send();
+    },
+  );
+
   // Mensageria: listar e enviar.
   app.get<{ Params: { conversationId: string } }>(
     "/api/crm/messages/:conversationId",
@@ -134,5 +158,37 @@ export function registerCrmMessagingRoutes(app: FastifyInstance, pool: Pool): vo
   });
   app.get("/api/crm/reports/sla", async (_request, reply) => {
     return reply.send(await withTransaction(pool, (c) => slaReport(c)));
+  });
+
+  // --- Atividades ---
+  app.get("/api/crm/activities/mine", async (request, reply) => {
+    if (!request.userId) {
+      return reply.status(401).send({ code: "AUTH_UNAUTHORIZED", message: "Requisição não autenticada.", details: {} });
+    }
+    return reply.send(await withTransaction(pool, (c) => listMyActivities(c, request.userId!)));
+  });
+
+  app.get<{ Params: { id: string } }>("/api/crm/opportunities/:id/activities", async (request, reply) => {
+    return reply.send(await withTransaction(pool, (c) => listByOpportunity(c, request.params.id)));
+  });
+
+  app.post<{
+    Body: { type: ActivityType; subject: string; notes?: string; opportunity_id?: string; account_id?: string; person_contact_id?: string; due_at?: string };
+  }>("/api/crm/activities", async (request, reply) => {
+    const b = request.body;
+    const act = await withTransaction(pool, (c) =>
+      createActivity(c, {
+        type: b.type, subject: b.subject, notes: b.notes,
+        opportunityId: b.opportunity_id, accountId: b.account_id, personContactId: b.person_contact_id,
+        dueAt: b.due_at,
+      }, request.userId),
+    );
+    return reply.status(201).send(act);
+  });
+
+  app.post<{ Params: { id: string } }>("/api/crm/activities/:id/complete", async (request, reply) => {
+    const act = await withTransaction(pool, (c) => completeActivity(c, request.params.id));
+    if (!act) return reply.status(404).send({ code: "CRM_ACTIVITY_NOT_FOUND", message: "Atividade não encontrada.", details: {} });
+    return reply.send(act);
   });
 }
