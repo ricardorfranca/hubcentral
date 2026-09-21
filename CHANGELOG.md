@@ -2,6 +2,25 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.9.2] - 2026-09-21
+
+### Adicionado
+
+- **Assistente de Importação de contatos** (SuperAdministrador): envio de arquivo **CSV, XLSX ou JSON**, pré-visualização com amostra das linhas, **mapeamento de colunas** para campos padrão e campos personalizados, aplicação de rótulos em lote, escolha da **estratégia de duplicatas** (ignorar/atualizar) e relatório final de importados, atualizados, ignorados e rejeitados.
+- **Assistente de Exportação de contatos** (SuperAdministrador): filtros por tipo, rótulo e busca, **seleção das colunas** padrão e dos campos personalizados a incluir, com download em **CSV, XLSX ou JSON**.
+- **Suporte real a XLSX**: leitura e geração de planilhas OOXML via biblioteca dedicada (`exceljs`). Antes o formato `xlsx` era um espaço reservado que usava o mesmo conteúdo do JSON.
+- **CRM — contato principal na oportunidade**: toda oportunidade passa a exigir a **pessoa responsável na empresa** com quem vamos nos comunicar. O diálogo de criação lista os contatos da empresa escolhida e permite **cadastrar um contato novo** (criado, vinculado à empresa e já selecionado) ou **cadastrar uma empresa nova** sem sair do fluxo, com autofill da razão social pelo CNPJ. O contato principal aparece no detalhe da oportunidade.
+
+### Alterado
+
+- **Menu por papel**: itens de menu podem ser marcados como exclusivos do SuperAdministrador (`superadminOnly`), aparecendo apenas para esse papel independente dos namespaces da sessão. Aplicado aos assistentes de importação/exportação, que também são reforçados no backend e por guarda de rota na interface.
+- **Limite de corpo das requisições JSON** elevado e configurável por `JSON_BODY_LIMIT_BYTES` (padrão 50 MiB), para acomodar os lotes do assistente de importação. Importações são limitadas a 50.000 linhas por execução.
+
+### Operação
+
+- Nova dependência de backend: `exceljs` (geração/leitura de XLSX). Rode `npm ci` ao atualizar.
+- Nova migração de banco: execute `npm run migrate:up` para adicionar `primary_contact_id` às oportunidades do CRM. A coluna é opcional no banco para preservar oportunidades já existentes; a obrigatoriedade vale para novas oportunidades.
+
 ## [0.9.1] - 2026-09-20
 
 ### Adicionado

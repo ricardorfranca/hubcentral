@@ -4,7 +4,14 @@ import type { PoolClient } from "pg";
 import { withRollback, closeTestPool } from "../helpers/db.js";
 import { grantNamespace } from "../../src/core/iam/rbac.js";
 import { exportData, importData, type RowValidation } from "../../src/core/io/import-export-gateway.js";
-import { serialize, parse, type IoFormat, type IoRecord } from "../../src/core/io/formats.js";
+import {
+  serialize,
+  parse,
+  serializeXlsx,
+  parseXlsx,
+  type IoFormat,
+  type IoRecord,
+} from "../../src/core/io/formats.js";
 import { DomainError, ErrorCode } from "../../src/core/errors.js";
 
 /**
@@ -35,23 +42,29 @@ const recordArb: fc.Arbitrary<IoRecord> = fc.dictionary(
   { minKeys: 1, maxKeys: 4 },
 );
 
-const formatArb = fc.constantFrom<IoFormat>("csv", "json", "xlsx");
+// Formatos textuais: CSV e JSON usam serialize/parse síncronos.
+const textFormatArb = fc.constantFrom<IoFormat>("csv", "json");
+
+/** Uniformiza as colunas entre linhas (CSV é posicional por cabeçalho). */
+function normalizeRows(rowsRaw: readonly IoRecord[]): { rows: IoRecord[]; cols: string[] } {
+  const cols = Array.from(new Set(rowsRaw.flatMap((r) => Object.keys(r))));
+  const rows = rowsRaw.map((r) => {
+    const norm: IoRecord = {};
+    for (const c of cols) norm[c] = r[c] ?? "";
+    return norm;
+  });
+  return { rows, cols };
+}
 
 describe("Formatos de import/export", () => {
-  it("round-trip serialize→parse preserva os registros (colunas uniformes)", async () => {
+  it("round-trip serialize→parse preserva os registros (CSV/JSON, colunas uniformes)", async () => {
     await fc.assert(
       fc.property(
-        formatArb,
+        textFormatArb,
         fc.array(recordArb, { minLength: 1, maxLength: 8 }),
         (format, rowsRaw) => {
-          // Uniformiza as colunas entre linhas (CSV é posicional por cabeçalho).
-          const cols = Array.from(new Set(rowsRaw.flatMap((r) => Object.keys(r))));
+          const { rows, cols } = normalizeRows(rowsRaw);
           if (cols.length === 0) return;
-          const rows = rowsRaw.map((r) => {
-            const norm: IoRecord = {};
-            for (const c of cols) norm[c] = r[c] ?? "";
-            return norm;
-          });
 
           const text = serialize(format, rows, cols);
           const back = parse(format, text);
@@ -60,6 +73,32 @@ describe("Formatos de import/export", () => {
       ),
       RUNS,
     );
+  });
+
+  it("round-trip XLSX (binário) preserva os registros (colunas uniformes)", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.array(recordArb, { minLength: 1, maxLength: 8 }),
+        async (rowsRaw) => {
+          const { rows, cols } = normalizeRows(rowsRaw);
+          if (cols.length === 0) return;
+          // parseXlsx descarta, por projeto, linhas totalmente vazias (ruído
+          // comum no fim de planilhas). Comparamos contra as linhas com ao
+          // menos uma célula não vazia — que é o que a importação persiste.
+          const expected = rows.filter((r) => Object.values(r).some((v) => v !== ""));
+
+          const buffer = await serializeXlsx(rows, cols);
+          const back = await parseXlsx(buffer);
+          expect(back).toEqual(expected);
+        },
+      ),
+      { numRuns: 20 },
+    );
+  });
+
+  it("serialize/parse rejeitam xlsx (formato binário) com mensagem orientando o uso correto", () => {
+    expect(() => serialize("xlsx", [{ a: "1" }], ["a"])).toThrow(/serializeXlsx/);
+    expect(() => parse("xlsx", "")).toThrow(/parseXlsx/);
   });
 
   it("CSV: round-trip de casos de borda (campo vazio, vírgula, aspas, quebra de linha)", () => {

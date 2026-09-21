@@ -68,7 +68,7 @@
     - Confirmar que todos os testes continuam passando após a correção
     - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-- [-] 4. Testes unitários e de integração complementares
+- [x] 4. Testes unitários e de integração complementares
   - Unit (`tests/iam/rbac.test.ts`): `isSuperadmin` retorna `true` para papel superadmin, `false` para outros papéis e `false` para `userId` nulo
   - Unit: `authorize` autoriza superadmin para namespace ausente de `ALL_NAMESPACES` (Req 2.3)
   - Unit: `authorize` recusa `userId` nulo com `AUTH_UNAUTHORIZED` mesmo quando o alvo hipotético seria superadmin (Req 3.3)
@@ -77,7 +77,7 @@
   - Integração (regressão de usuário comum): usuário sem `superadmin` acessa rota com namespace concedido (autorizado) e sem namespace (negado com `RBAC_ACCESS_DENIED`) (Req 3.1, 3.2)
   - _Requirements: 2.1, 2.2, 2.3, 3.1, 3.2, 3.3, 3.4_
 
-- [~] 5. Checkpoint - Garantir que todos os testes passam
+- [x] 5. Checkpoint - Garantir que todos os testes passam
   - Executar a suíte completa (`npm test` / `vitest --run`) e garantir que todos os testes passam
   - Confirmar Property 1 (bug corrigido) e Property 2 (sem regressões) verdes
   - Em caso de dúvidas ou falhas inesperadas, perguntar ao usuário

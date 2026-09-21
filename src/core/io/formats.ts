@@ -159,17 +159,18 @@ export function fromJson(text: string): IoRecord[] {
 }
 
 /**
- * Serializa registros no formato indicado (Req 11.1).
+ * Serializa registros no formato TEXTUAL indicado (Req 11.1).
  *
- * Observação sobre XLSX: a geração/leitura do binário OOXML exige uma
- * biblioteca dedicada (ex.: exceljs), a ser plugada na camada de infra. Aqui o
- * `xlsx` usa o mesmo formato de intercâmbio do JSON para manter o contrato de
- * formatos completo e testável no núcleo, sem inflar dependências.
+ * Suporta apenas os formatos baseados em texto: `csv` e `json`. Para `xlsx`
+ * (binário OOXML) use {@link serializeXlsx}, que produz um `Buffer` via
+ * biblioteca dedicada. A camada HTTP escolhe entre esta função e a de XLSX
+ * conforme o formato solicitado.
  *
- * @param format - Formato de saída.
+ * @param format - Formato de saída (`csv` ou `json`).
  * @param rows - Registros a serializar.
  * @param columns - Ordem opcional de colunas (CSV).
  * @returns Texto serializado.
+ * @throws {Error} Se `format` for `xlsx` (use {@link serializeXlsx}) ou desconhecido.
  */
 export function serialize(
   format: IoFormat,
@@ -180,28 +181,133 @@ export function serialize(
     case "csv":
       return toCsv(rows, columns);
     case "json":
-    case "xlsx":
       return toJson(rows);
+    case "xlsx":
+      throw new Error("Formato xlsx é binário; use serializeXlsx para gerar o Buffer.");
     default:
       throw new Error(`Formato de exportação não suportado: ${String(format)}`);
   }
 }
 
 /**
- * Faz o parsing de um texto no formato indicado em registros (Req 11.2).
+ * Faz o parsing de um texto no formato TEXTUAL indicado em registros (Req 11.2).
  *
- * @param format - Formato de entrada.
+ * Suporta apenas `csv` e `json`. Para `xlsx` (binário) use {@link parseXlsx},
+ * que lê a partir de um `Buffer`.
+ *
+ * @param format - Formato de entrada (`csv` ou `json`).
  * @param text - Conteúdo a interpretar.
  * @returns Lista de registros.
+ * @throws {Error} Se `format` for `xlsx` (use {@link parseXlsx}) ou desconhecido.
  */
 export function parse(format: IoFormat, text: string): IoRecord[] {
   switch (format) {
     case "csv":
       return fromCsv(text);
     case "json":
-    case "xlsx":
       return fromJson(text);
+    case "xlsx":
+      throw new Error("Formato xlsx é binário; use parseXlsx para ler o Buffer.");
     default:
       throw new Error(`Formato de importação não suportado: ${String(format)}`);
   }
+}
+
+/**
+ * Serializa registros para uma planilha XLSX real (OOXML), via exceljs.
+ *
+ * A primeira linha é o cabeçalho (nomes das colunas); as demais são os dados.
+ * Cada célula é escrita como texto para preservar o contrato `IoRecord`
+ * (célula = string), evitando coerções silenciosas do Excel (ex.: perda de
+ * zeros à esquerda em telefones/documentos).
+ *
+ * @param rows - Registros a serializar.
+ * @param columns - Ordem das colunas; se omitido, deriva do primeiro registro.
+ * @returns O conteúdo binário do arquivo `.xlsx`.
+ */
+export async function serializeXlsx(
+  rows: readonly IoRecord[],
+  columns?: readonly string[],
+): Promise<Buffer> {
+  // Import dinâmico: mantém o exceljs fora do caminho quente de CSV/JSON e
+  // compatível com o carregamento ESM do pacote.
+  const ExcelJS = (await import("exceljs")).default;
+  const cols = columns ?? (rows[0] ? Object.keys(rows[0]) : []);
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Dados");
+
+  sheet.addRow([...cols]);
+  for (const record of rows) {
+    sheet.addRow(cols.map((c) => record[c] ?? ""));
+  }
+  // Todas as células como texto, inclusive o cabeçalho.
+  sheet.eachRow((row) => {
+    row.eachCell((cell) => {
+      cell.numFmt = "@";
+    });
+  });
+
+  const out = await workbook.xlsx.writeBuffer();
+  return Buffer.from(out);
+}
+
+/**
+ * Faz o parsing de uma planilha XLSX (OOXML) em registros, via exceljs.
+ *
+ * Usa a PRIMEIRA planilha e a PRIMEIRA linha como cabeçalho. Cada valor de
+ * célula é normalizado para string (datas em ISO `YYYY-MM-DD`; demais tipos
+ * convertidos por `String`). Colunas sem cabeçalho recebem nome `coluna_N`.
+ *
+ * @param buffer - Conteúdo binário do arquivo `.xlsx`.
+ * @returns Lista de registros.
+ * @throws {Error} Se o arquivo não contiver planilhas.
+ */
+export async function parseXlsx(buffer: Buffer): Promise<IoRecord[]> {
+  const ExcelJS = (await import("exceljs")).default;
+  const workbook = new ExcelJS.Workbook();
+  // exceljs aceita ArrayBuffer/Buffer; usamos o buffer subjacente.
+  await workbook.xlsx.load(
+    buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer,
+  );
+  const sheet = workbook.worksheets[0];
+  if (!sheet) {
+    throw new Error("Arquivo XLSX não contém planilhas.");
+  }
+
+  const cellToString = (value: unknown): string => {
+    if (value === null || value === undefined) return "";
+    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    if (typeof value === "object") {
+      // Célula de fórmula: { formula, result } ; hyperlink: { text } ; rich text.
+      const obj = value as { result?: unknown; text?: unknown; richText?: { text: string }[] };
+      if (Array.isArray(obj.richText)) return obj.richText.map((r) => r.text).join("");
+      if (obj.text !== undefined) return String(obj.text);
+      if (obj.result !== undefined) return String(obj.result);
+      return "";
+    }
+    return String(value);
+  };
+
+  const headerRow = sheet.getRow(1);
+  const header: string[] = [];
+  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    const name = cellToString(cell.value).trim();
+    header[colNumber - 1] = name || `coluna_${colNumber}`;
+  });
+
+  const records: IoRecord[] = [];
+  for (let r = 2; r <= sheet.rowCount; r++) {
+    const row = sheet.getRow(r);
+    const record: IoRecord = {};
+    let hasAny = false;
+    for (let c = 0; c < header.length; c++) {
+      const key = header[c] ?? `coluna_${c + 1}`;
+      const value = cellToString(row.getCell(c + 1).value);
+      if (value !== "") hasAny = true;
+      record[key] = value;
+    }
+    // Ignora linhas totalmente vazias (comuns ao final de planilhas).
+    if (hasAny) records.push(record);
+  }
+  return records;
 }

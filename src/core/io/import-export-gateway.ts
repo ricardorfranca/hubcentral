@@ -11,7 +11,14 @@
 import type { PoolClient } from "pg";
 import { authorize } from "../iam/rbac.js";
 import { log as auditLog } from "../audit/audit-logger.js";
-import { serialize, parse, type IoFormat, type IoRecord } from "./formats.js";
+import {
+  serialize,
+  parse,
+  serializeXlsx,
+  parseXlsx,
+  type IoFormat,
+  type IoRecord,
+} from "./formats.js";
 
 /** Resultado da validação de uma linha de importação. */
 export type RowValidation =
@@ -50,9 +57,12 @@ export async function exportData(
     rows: readonly IoRecord[];
     columns?: readonly string[];
   },
-): Promise<string> {
+): Promise<string | Buffer> {
   await authorize(client, opts.userId, `${opts.module}:${opts.resource}:exportar`);
-  const content = serialize(opts.format, opts.rows, opts.columns);
+  const content =
+    opts.format === "xlsx"
+      ? await serializeXlsx(opts.rows, opts.columns)
+      : serialize(opts.format, opts.rows, opts.columns);
 
   await auditLog(client, {
     userId: opts.userId,
@@ -82,7 +92,8 @@ export async function importData(
     resource: string;
     format: IoFormat;
     userId: string | null;
-    content: string;
+    /** Conteúdo textual (CSV/JSON) ou binário (XLSX, `Buffer`). */
+    content: string | Buffer;
     /** Valida uma linha; retorna ok+valor normalizado ou motivo da rejeição. */
     validateRow: (row: IoRecord, index: number) => RowValidation;
     /** Persiste uma linha válida. */
@@ -91,7 +102,10 @@ export async function importData(
 ): Promise<ImportResult> {
   await authorize(client, opts.userId, `${opts.module}:${opts.resource}:importar`);
 
-  const rows = parse(opts.format, opts.content);
+  const rows =
+    opts.format === "xlsx"
+      ? await parseXlsx(Buffer.isBuffer(opts.content) ? opts.content : Buffer.from(opts.content))
+      : parse(opts.format, typeof opts.content === "string" ? opts.content : opts.content.toString("utf8"));
   const rejected: RejectedRow[] = [];
   let imported = 0;
 

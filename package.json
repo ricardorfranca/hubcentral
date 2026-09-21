@@ -1,6 +1,6 @@
 {
   "name": "hub-central",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "HUB Central — plataforma parametrizável de centralização, orquestração e integração de serviços. Núcleo: Base Central de Contatos + Contrato de Módulos.",
   "license": "UNLICENSED",
   "private": true,
@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.1",
+    "exceljs": "^4.4.0",
     "fastify": "^5.12.5",
     "nodemailer": "^10.0.10",
     "pdfkit": "^0.20.2",

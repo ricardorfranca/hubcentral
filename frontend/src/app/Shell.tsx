@@ -46,11 +46,20 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
 
+  const isSuperadmin = user?.role === "superadmin";
+
   // Menu agrupado por módulo: para cada módulo permitido, os itens que o
-  // usuário pode ver. Módulos sem nenhum item visível são omitidos.
+  // usuário pode ver. Itens `superadminOnly` só aparecem para o
+  // SuperAdministrador (por papel), independente dos namespaces da sessão.
+  // Módulos sem nenhum item visível são omitidos.
   const menuGroups = MODULE_REGISTRY
     .filter((m) => can(m.requiredNamespace))
-    .map((m) => ({ title: m.title, items: m.menu.filter((entry) => can(entry.requiredNamespace)) }))
+    .map((m) => ({
+      title: m.title,
+      items: m.menu.filter(
+        (entry) => can(entry.requiredNamespace) && (!entry.superadminOnly || isSuperadmin),
+      ),
+    }))
     .filter((g) => g.items.length > 0);
 
   async function handleLogout(): Promise<void> {

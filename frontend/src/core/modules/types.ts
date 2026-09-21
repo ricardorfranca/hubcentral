@@ -20,6 +20,12 @@ export interface MenuEntry {
   icon: ComponentType;
   /** Namespace RBAC exigido para exibir (opcional). */
   requiredNamespace?: string;
+  /**
+   * Se `true`, o item só aparece para SuperAdministradores (papel), independente
+   * dos namespaces da sessão. Usado por áreas de alto risco (ex.: assistentes de
+   * importação/exportação) cujo acesso é exclusivo do SuperAdministrador.
+   */
+  superadminOnly?: boolean;
 }
 
 /** Definição de um módulo frontend. */

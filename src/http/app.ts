@@ -20,6 +20,7 @@ import { registerCrmSalesRoutes } from "./routes/crm-sales.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerBackupRoutes } from "./routes/backup.js";
+import { registerImportExportRoutes } from "./routes/import-export.js";
 import { registerCommsRoutes } from "./routes/comms.js";
 import { validateSession } from "../core/iam/session-service.js";
 
@@ -67,7 +68,12 @@ async function resolveUser(pool: Pool, request: FastifyRequest): Promise<string 
  * @returns A instância Fastify pronta.
  */
 export function buildApp(pool: Pool): FastifyInstance {
-  const app = Fastify({ logger: false });
+  // O Assistente de Importação reenvia as linhas já parseadas como JSON na etapa
+  // de execução; elevamos o limite de corpo para acomodar lotes grandes.
+  const app = Fastify({
+    logger: false,
+    bodyLimit: Number(process.env.JSON_BODY_LIMIT_BYTES ?? 52_428_800), // 50 MiB
+  });
 
   // Upload de anexos (multipart). O limite de tamanho efetivo é validado no
   // serviço a partir da Central de Configurações; aqui usamos um teto de guarda.
@@ -99,6 +105,7 @@ export function buildApp(pool: Pool): FastifyInstance {
   registerNotificationRoutes(app, pool);
   registerSettingsRoutes(app, pool);
   registerBackupRoutes(app, pool);
+  registerImportExportRoutes(app, pool);
   registerCommsRoutes(app, pool);
   registerProjetosRoutes(app, pool);
 
