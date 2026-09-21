@@ -123,6 +123,8 @@ export const ErrorCode = {
   CRM_INVALID_CNPJ: "CRM_INVALID_CNPJ",
   /** Oportunidade sem conta associada. */
   CRM_OPP_NO_ACCOUNT: "CRM_OPP_NO_ACCOUNT",
+  /** Oportunidade sem contato principal (pessoa responsável na empresa). */
+  CRM_OPP_NO_CONTACT: "CRM_OPP_NO_CONTACT",
   /** Finalização de oportunidade sem valores (ganho) ou sem motivo (perdido). */
   CRM_OPP_FINALIZE_INVALID: "CRM_OPP_FINALIZE_INVALID",
   /** Estágio inexistente. */
@@ -131,6 +133,8 @@ export const ErrorCode = {
   CRM_OPP_NOT_FOUND: "CRM_OPP_NOT_FOUND",
   /** Conta não encontrada. */
   CRM_ACCOUNT_NOT_FOUND: "CRM_ACCOUNT_NOT_FOUND",
+  /** Contato (pessoa) não encontrado ao vincular a uma oportunidade/conta. */
+  CRM_CONTACT_NOT_FOUND: "CRM_CONTACT_NOT_FOUND",
   /** Parâmetro de configuração inexistente na Central de Configurações. */
   SETTING_NOT_FOUND: "SETTING_NOT_FOUND",
   /** Notificação não encontrada. */

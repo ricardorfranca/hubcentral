@@ -38,7 +38,9 @@ export interface Opportunity {
   owner_user_id: string | null;
   status: "open" | "won" | "lost";
   loss_reason: string | null;
+  primary_contact_id: string | null;
   account_name?: string | null;
+  primary_contact_name?: string | null;
   arr?: number;
 }
 
@@ -137,6 +139,7 @@ export function getOpportunity(id: string): Promise<Opportunity> {
 export function createOpportunity(input: {
   account_id: string;
   name: string;
+  primary_contact_id: string;
   mrr?: number | undefined;
   one_time?: number | undefined;
   origin?: Origin | undefined;

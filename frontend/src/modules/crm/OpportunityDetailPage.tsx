@@ -58,6 +58,11 @@ export function OpportunityDetailPage(): JSX.Element {
         <Box>
           <Typography variant="h5">{opp.name}</Typography>
           {opp.account_name && <Typography color="text.secondary">{opp.account_name}</Typography>}
+          {opp.primary_contact_name && (
+            <Typography variant="body2" color="text.secondary">
+              Contato: {opp.primary_contact_name}
+            </Typography>
+          )}
         </Box>
         <Chip
           label={opp.status === "won" ? "Ganho" : opp.status === "lost" ? "Perdido" : "Aberta"}

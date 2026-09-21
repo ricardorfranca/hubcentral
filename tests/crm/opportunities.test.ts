@@ -33,6 +33,18 @@ async function newAccount(client: PoolClient): Promise<string> {
   return acc.id;
 }
 
+/** Cria uma pessoa única e retorna seu `contact_id` (contato principal). */
+async function newPerson(client: PoolClient): Promise<string> {
+  seq += 1;
+  const person = await createContact(client, {
+    contact_type: "pessoa",
+    full_name: `Responsável ${seq}`,
+    email: `resp${seq}@exemplo.com`,
+    phone: "11999990000",
+  });
+  return person.id;
+}
+
 describe("Contas B2B", () => {
   it("exige CNPJ válido (14 dígitos)", async () => {
     await withRollback(async (client) => {
@@ -73,7 +85,8 @@ describe("Oportunidades", () => {
       fc.asyncProperty(fc.double({ min: 0, max: 100000, noNaN: true }), async (mrr) => {
         await withRollback(async (client) => {
           const accountId = await newAccount(client);
-          await createOpportunity(client, { accountId, name: "Op", mrr });
+          const primaryContactId = await newPerson(client);
+          await createOpportunity(client, { accountId, name: "Op", mrr, primaryContactId });
           const list = await listOpportunities(client, { accountId });
           expect(list).toHaveLength(1);
           expect(list[0]!.arr).toBeCloseTo(Number(list[0]!.mrr) * 12, 2);
@@ -84,11 +97,42 @@ describe("Oportunidades", () => {
     );
   });
 
+  it("exige um contato principal (pessoa responsável na empresa)", async () => {
+    await withRollback(async (client) => {
+      const accountId = await newAccount(client);
+      try {
+        await createOpportunity(client, { accountId, name: "Sem contato", mrr: 100, primaryContactId: "" });
+        expect.unreachable("deveria rejeitar oportunidade sem contato principal");
+      } catch (err) {
+        expect((err as DomainError).code).toBe(ErrorCode.CRM_OPP_NO_CONTACT);
+      }
+    });
+  });
+
+  it("vincula o contato principal à oportunidade e à conta", async () => {
+    await withRollback(async (client) => {
+      const accountId = await newAccount(client);
+      const primaryContactId = await newPerson(client);
+      const opp = await createOpportunity(client, { accountId, name: "Op", mrr: 100, primaryContactId });
+
+      expect(opp.primary_contact_id).toBe(primaryContactId);
+
+      // O contato passa a constar entre os contatos da conta.
+      const view = await getAccount(client, accountId);
+      expect(view?.contacts.some((c) => c.person_contact_id === primaryContactId)).toBe(true);
+
+      // E a listagem resolve o nome do contato principal.
+      const list = await listOpportunities(client, { accountId });
+      expect(list[0]!.primary_contact_name).toContain("Responsável");
+    });
+  });
+
   it("permite múltiplas oportunidades para a mesma conta (repetível)", async () => {
     await withRollback(async (client) => {
       const accountId = await newAccount(client);
-      await createOpportunity(client, { accountId, name: "Op1", mrr: 100 });
-      await createOpportunity(client, { accountId, name: "Op2", mrr: 200 });
+      const primaryContactId = await newPerson(client);
+      await createOpportunity(client, { accountId, name: "Op1", mrr: 100, primaryContactId });
+      await createOpportunity(client, { accountId, name: "Op2", mrr: 200, primaryContactId });
       const list = await listOpportunities(client, { accountId });
       expect(list).toHaveLength(2);
     });
@@ -97,7 +141,8 @@ describe("Oportunidades", () => {
   it("mover para estágio atualiza a probabilidade (proposta=60)", async () => {
     await withRollback(async (client) => {
       const accountId = await newAccount(client);
-      const opp = await createOpportunity(client, { accountId, name: "Op", mrr: 500 });
+      const primaryContactId = await newPerson(client);
+      const opp = await createOpportunity(client, { accountId, name: "Op", mrr: 500, primaryContactId });
       const moved = await moveStage(client, opp.id, "proposta");
       expect(moved.stage_id).toBe("proposta");
       expect(moved.probability).toBe(60);
@@ -107,7 +152,8 @@ describe("Oportunidades", () => {
   it("finalizar como ganho exige valor; perdido exige motivo", async () => {
     await withRollback(async (client) => {
       const accountId = await newAccount(client);
-      const opp1 = await createOpportunity(client, { accountId, name: "Op", mrr: 0, oneTime: 0 });
+      const primaryContactId = await newPerson(client);
+      const opp1 = await createOpportunity(client, { accountId, name: "Op", mrr: 0, oneTime: 0, primaryContactId });
       try {
         await finalize(client, opp1.id, "won", {});
         expect.unreachable("ganho sem valor deveria falhar");
@@ -119,7 +165,7 @@ describe("Oportunidades", () => {
       expect(won.status).toBe("won");
       expect(won.probability).toBe(100);
 
-      const opp2 = await createOpportunity(client, { accountId, name: "Op2", mrr: 100 });
+      const opp2 = await createOpportunity(client, { accountId, name: "Op2", mrr: 100, primaryContactId });
       try {
         await finalize(client, opp2.id, "lost", {});
         expect.unreachable("perda sem motivo deveria falhar");

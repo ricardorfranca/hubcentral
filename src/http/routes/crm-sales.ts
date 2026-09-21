@@ -76,14 +76,16 @@ export function registerCrmSalesRoutes(app: FastifyInstance, pool: Pool): void {
   });
 
   app.post<{
-    Body: { account_id: string; name: string; mrr?: number; one_time?: number; origin?: Origin; qualification?: Qualification; stage_id?: string; expected_close?: string };
+    Body: { account_id: string; name: string; primary_contact_id: string; mrr?: number; one_time?: number; origin?: Origin; qualification?: Qualification; stage_id?: string; expected_close?: string };
   }>("/api/crm/opportunities", async (request, reply) => {
     const b = request.body;
     const opp = await withTransaction(pool, (c) =>
       createOpportunity(c, {
-        accountId: b.account_id, name: b.name, mrr: b.mrr, oneTime: b.one_time,
+        accountId: b.account_id, name: b.name, primaryContactId: b.primary_contact_id,
+        mrr: b.mrr, oneTime: b.one_time,
         origin: b.origin, qualification: b.qualification, stageId: b.stage_id,
-        expectedClose: b.expected_close, ownerUserId: request.userId ?? undefined,
+        expectedClose: b.expected_close,
+        ownerUserId: request.userId ?? undefined,
       }, request.userId),
     );
     return reply.status(201).send(opp);

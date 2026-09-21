@@ -5,6 +5,7 @@ import { createActivity, completeActivity, listMyActivities, listByOpportunity }
 import { sendMessage, listConversations, markRead, dmConversationId, GROUP_CONVERSATION } from "../../src/modules/crm/message-service.js";
 import { createAccount } from "../../src/modules/crm/account-service.js";
 import { createOpportunity } from "../../src/modules/crm/opportunity-service.js";
+import { createContact } from "../../src/core/contacts/contact-service.js";
 
 /**
  * @file activities-messaging.test.ts
@@ -27,12 +28,25 @@ async function newUser(client: PoolClient): Promise<string> {
   return rows[0]!.id;
 }
 
+/** Cria uma pessoa e retorna seu `contact_id` (contato principal da oportunidade). */
+async function newPerson(client: PoolClient): Promise<string> {
+  seq += 1;
+  const person = await createContact(client, {
+    contact_type: "pessoa",
+    full_name: `Resp ${seq}`,
+    email: `resp-am${seq}-${Math.random().toString(36).slice(2)}@x.com`,
+    phone: "11999990000",
+  });
+  return person.id;
+}
+
 describe("Atividades", () => {
   it("cria, lista pendentes e conclui atividade", async () => {
     await withRollback(async (client) => {
       const user = await newUser(client);
       const acc = await createAccount(client, { legalName: "E", cnpj: String(30000000000000 + seq) });
-      const opp = await createOpportunity(client, { accountId: acc.id, name: "Op", mrr: 100 });
+      const primaryContactId = await newPerson(client);
+      const opp = await createOpportunity(client, { accountId: acc.id, name: "Op", mrr: 100, primaryContactId });
 
       const act = await createActivity(client, {
         type: "ligacao", subject: "Ligar para decisor", opportunityId: opp.id, assignedTo: user,

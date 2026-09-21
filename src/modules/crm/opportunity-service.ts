@@ -32,11 +32,12 @@ export interface Opportunity {
   status: "open" | "won" | "lost";
   loss_reason: string | null;
   expected_close: Date | null;
+  primary_contact_id: string | null;
 }
 
 /** Colunas retornadas de uma oportunidade. */
 const OPP_COLUMNS =
-  "id, account_id, name, stage_id, probability, mrr, one_time, origin, qualification, owner_user_id, status, loss_reason, expected_close";
+  "id, account_id, name, stage_id, probability, mrr, one_time, origin, qualification, owner_user_id, status, loss_reason, expected_close, primary_contact_id";
 
 /** Lê a probabilidade de um estágio (e valida existência). */
 async function stageProbability(client: PoolClient, stageId: string): Promise<number> {
@@ -59,12 +60,15 @@ async function stageProbability(client: PoolClient, stageId: string): Promise<nu
  * @param actorUserId - Autor.
  * @returns A oportunidade criada.
  * @throws {DomainError} `CRM_ACCOUNT_NOT_FOUND` se a conta não existe.
+ * @throws {DomainError} `CRM_OPP_NO_CONTACT` se o contato principal não for informado.
+ * @throws {DomainError} `CRM_CONTACT_NOT_FOUND` se o contato não for uma pessoa ativa.
  */
 export async function createOpportunity(
   client: PoolClient,
   input: {
     accountId: string;
     name: string;
+    primaryContactId: string;
     mrr?: number | undefined;
     oneTime?: number | undefined;
     origin?: Origin | undefined;
@@ -85,22 +89,53 @@ export async function createOpportunity(
     });
   }
 
+  // O contato principal (pessoa responsável na empresa) é obrigatório.
+  if (!input.primaryContactId) {
+    throw new DomainError(ErrorCode.CRM_OPP_NO_CONTACT, "Toda oportunidade precisa de um contato principal (pessoa responsável na empresa).", {});
+  }
+  const contact = await client.query<{ id: string }>(
+    `SELECT id FROM core.contacts
+     WHERE id = $1 AND contact_type = 'pessoa' AND merged_into IS NULL`,
+    [input.primaryContactId],
+  );
+  if (!contact.rows[0]) {
+    throw new DomainError(ErrorCode.CRM_CONTACT_NOT_FOUND, "Contato principal não encontrado.", {
+      primary_contact_id: input.primaryContactId,
+    });
+  }
+
   const stageId = input.stageId ?? "novo";
   const probability = await stageProbability(client, stageId);
 
   const { rows } = await client.query<Opportunity>(
     `INSERT INTO mod_crm.opportunities
-       (account_id, name, stage_id, probability, mrr, one_time, origin, qualification, owner_user_id, expected_close, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       (account_id, name, stage_id, probability, mrr, one_time, origin, qualification, owner_user_id, expected_close, primary_contact_id, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING ${OPP_COLUMNS}`,
     [
       input.accountId, input.name, stageId, probability,
       input.mrr ?? 0, input.oneTime ?? 0,
       input.origin ?? null, input.qualification ?? null,
-      input.ownerUserId ?? null, input.expectedClose ?? null, actorUserId,
+      input.ownerUserId ?? null, input.expectedClose ?? null,
+      input.primaryContactId, actorUserId,
     ],
   );
   const opp = rows[0] as Opportunity;
+
+  // Registra o contato principal também como contato da oportunidade e garante
+  // o vínculo com a conta, para manter a rede de relacionamento consistente.
+  await client.query(
+    `INSERT INTO mod_crm.opportunity_contacts (opportunity_id, person_contact_id, role)
+     VALUES ($1, $2, 'principal')
+     ON CONFLICT (opportunity_id, person_contact_id) DO UPDATE SET role = EXCLUDED.role`,
+    [opp.id, input.primaryContactId],
+  );
+  await client.query(
+    `INSERT INTO mod_crm.account_contacts (account_id, person_contact_id, role)
+     VALUES ($1, $2, NULL)
+     ON CONFLICT (account_id, person_contact_id) DO NOTHING`,
+    [input.accountId, input.primaryContactId],
+  );
 
   await auditLog(client, {
     userId: actorUserId,
@@ -119,9 +154,10 @@ export async function createOpportunity(
   return opp;
 }
 
-/** Oportunidade para listagem, com nome da conta e ARR derivado. */
+/** Oportunidade para listagem, com nome da conta, contato principal e ARR derivado. */
 export interface OpportunityListItem extends Opportunity {
   account_name: string | null;
+  primary_contact_name: string | null;
   arr: number;
 }
 
@@ -150,13 +186,16 @@ export async function listOpportunities(
   if (filters.accountId) { params.push(filters.accountId); clauses.push(`o.account_id = $${params.length}`); }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
 
-  const { rows } = await client.query<Opportunity & { account_name: string | null }>(
+  const { rows } = await client.query<Opportunity & { account_name: string | null; primary_contact_name: string | null }>(
     `SELECT o.id, o.account_id, o.name, o.stage_id, o.probability, o.mrr, o.one_time,
             o.origin, o.qualification, o.owner_user_id, o.status, o.loss_reason, o.expected_close,
-            c.legal_name AS account_name
+            o.primary_contact_id,
+            c.legal_name AS account_name,
+            pc.full_name AS primary_contact_name
      FROM mod_crm.opportunities o
      JOIN mod_crm.accounts a ON a.id = o.account_id
      JOIN core.contacts c ON c.id = a.company_contact_id
+     LEFT JOIN core.contacts pc ON pc.id = o.primary_contact_id
      ${where}
      ORDER BY o.updated_at DESC`,
     params,
@@ -171,9 +210,19 @@ export async function listOpportunities(
  * @param id - `id` da oportunidade.
  * @returns A oportunidade, ou `null`.
  */
-export async function getOpportunity(client: PoolClient, id: string): Promise<Opportunity | null> {
-  const { rows } = await client.query<Opportunity>(
-    `SELECT ${OPP_COLUMNS} FROM mod_crm.opportunities WHERE id = $1`,
+export async function getOpportunity(
+  client: PoolClient,
+  id: string,
+): Promise<(Opportunity & { account_name: string | null; primary_contact_name: string | null }) | null> {
+  const { rows } = await client.query<Opportunity & { account_name: string | null; primary_contact_name: string | null }>(
+    `SELECT ${OPP_COLUMNS.split(", ").map((c) => `o.${c}`).join(", ")},
+            c.legal_name AS account_name,
+            pc.full_name AS primary_contact_name
+     FROM mod_crm.opportunities o
+     JOIN mod_crm.accounts a ON a.id = o.account_id
+     JOIN core.contacts c ON c.id = a.company_contact_id
+     LEFT JOIN core.contacts pc ON pc.id = o.primary_contact_id
+     WHERE o.id = $1`,
     [id],
   );
   return rows[0] ?? null;

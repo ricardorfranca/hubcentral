@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 import { withRollback, closeTestPool } from "../helpers/db.js";
 import { createAccount } from "../../src/modules/crm/account-service.js";
 import { createOpportunity, moveStage, finalize } from "../../src/modules/crm/opportunity-service.js";
+import { createContact } from "../../src/core/contacts/contact-service.js";
 import { weightedForecast, newMrrArr, conversionByStage } from "../../src/modules/crm/forecast-service.js";
 
 /**
@@ -26,6 +27,18 @@ async function newAccount(client: PoolClient): Promise<string> {
   return acc.id;
 }
 
+/** Cria uma pessoa e retorna seu `contact_id` (contato principal da oportunidade). */
+async function newPerson(client: PoolClient): Promise<string> {
+  seq += 1;
+  const person = await createContact(client, {
+    contact_type: "pessoa",
+    full_name: `Resp ${seq}`,
+    email: `resp-fc${seq}-${Math.random().toString(36).slice(2)}@x.com`,
+    phone: "11999990000",
+  });
+  return person.id;
+}
+
 describe("Forecast de Receita Previsível", () => {
   // Property: o forecast ponderado é a soma de (mrr*12 + one_time)*prob/100 das
   // oportunidades abertas, calculada em memória como oráculo.
@@ -43,12 +56,13 @@ describe("Forecast de Receita Previsível", () => {
         async (opps) => {
           await withRollback(async (client) => {
             const accountId = await newAccount(client);
+            const primaryContactId = await newPerson(client);
             const probByStage: Record<string, number> = {
               novo: 10, qualificacao: 25, descoberta: 40, proposta: 60, negociacao: 80,
             };
             let expected = 0;
             for (const o of opps) {
-              const created = await createOpportunity(client, { accountId, name: "op", mrr: o.mrr, oneTime: o.oneTime });
+              const created = await createOpportunity(client, { accountId, name: "op", mrr: o.mrr, oneTime: o.oneTime, primaryContactId });
               if (o.stage !== "novo") await moveStage(client, created.id, o.stage);
               expected += (o.mrr * 12 + o.oneTime) * (probByStage[o.stage]! / 100);
             }
@@ -65,7 +79,8 @@ describe("Forecast de Receita Previsível", () => {
   it("oportunidade ganha entra em MRR/ARR novo e sai do forecast aberto", async () => {
     await withRollback(async (client) => {
       const accountId = await newAccount(client);
-      const opp = await createOpportunity(client, { accountId, name: "op", mrr: 1000, oneTime: 5000 });
+      const primaryContactId = await newPerson(client);
+      const opp = await createOpportunity(client, { accountId, name: "op", mrr: 1000, oneTime: 5000, primaryContactId });
       await finalize(client, opp.id, "won", { mrr: 1000, oneTime: 5000 });
 
       const now = new Date();
