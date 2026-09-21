@@ -30,6 +30,22 @@ export function listUsers(): Promise<AdminUser[]> {
   return request<AdminUser[]>("/api/iam/users");
 }
 
+/** Usuário reduzido, para preencher seletores de responsável. */
+export interface UserOption {
+  id: string;
+  full_name: string;
+  email: string;
+}
+
+/**
+ * Lista os usuários ativos reduzidos a id/nome/e-mail. Não exige a permissão de
+ * administração de usuários — serve para seletores como o gerente de contas de
+ * uma empresa.
+ */
+export function listUserOptions(): Promise<UserOption[]> {
+  return request<UserOption[]>("/api/users/options");
+}
+
 /** Convida um novo usuário. */
 export function inviteUser(email: string, fullName: string, role: UserRole): Promise<AdminUser> {
   return request<AdminUser>("/api/iam/users", { method: "POST", body: { email, full_name: fullName, role } });

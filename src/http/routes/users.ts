@@ -10,7 +10,8 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { withTransaction } from "../../core/db/pool.js";
 import {
-  listUsers, inviteUser, resendInvite, setUserRole, setUserStatus, setUserExtension, getUserById, setPassword,
+  listUsers, listUserOptions, inviteUser, resendInvite, setUserRole, setUserStatus, setUserExtension,
+  getUserById, setPassword,
   type UserRole,
 } from "../../core/iam/identity-service.js";
 import { authorize, listUserPermissions, setUserPermissions } from "../../core/iam/rbac.js";
@@ -28,6 +29,18 @@ const ADMIN_NS = "core:usuarios:gerenciar";
  * @param pool - Pool de conexões.
  */
 export function registerUserRoutes(app: FastifyInstance, pool: Pool): void {
+  // Opções de usuários para seletores de responsável (ex.: gerente de contas de
+  // uma empresa). Fora do grupo /api/iam porque NÃO é administração de usuários:
+  // exige apenas a permissão de visualizar contatos e devolve somente
+  // id/nome/e-mail dos usuários ativos, sem papel, status nem dados de senha.
+  app.get("/api/users/options", async (request, reply) => {
+    const options = await withTransaction(pool, async (c) => {
+      await authorize(c, request.userId, "core:contatos:visualizar");
+      return listUserOptions(c);
+    });
+    return reply.send(options);
+  });
+
   // Catálogo de namespaces disponíveis (para a UI montar o editor de permissões).
   app.get("/api/iam/namespaces", async (request, reply) => {
     await withTransaction(pool, (c) => authorize(c, request.userId, ADMIN_NS));

@@ -2,6 +2,32 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.10.0] - 2026-09-21
+
+### Adicionado
+
+- **Cadastro completo da empresa** (Contatos → Empresas): novo diálogo de criação e, pela primeira vez, **edição** do cadastro de empresa, com
+  - **Status do cliente**: contrato ativo ou sem contrato ativo, visível como etiqueta na lista e filtrável ("Todos / Contrato ativo / Sem contrato ativo").
+  - **Dados oficiais**: inscrição estadual e website (o site aceita só o domínio e recebe `https://` automaticamente).
+  - **Endereço com autofill por CEP**: ao sair do campo CEP, endereço, bairro, cidade e UF são buscados (BrasilAPI) e preenchidos, permanecendo editáveis. Número e complemento são digitados.
+  - **Dois telefones principais**, cada um com marcação **"É WhatsApp"**, no campo padronizado do Brasil (+55, armazenado em E.164).
+  - **Gerente de contas**: vínculo com um usuário do sistema, exibido na lista de empresas.
+- **Contatos vinculados à empresa por papel**: responsável principal, técnico, portabilidade e contato extra, gerenciados na aba "Contatos vinculados" do cadastro. O **responsável principal é único por empresa** (garantido por índice no banco, com mensagem de erro específica). Os vínculos usam `core.contact_company_links` — nenhum dado de contato é duplicado.
+- **Autofill de CNPJ ampliado**: além da razão social, cidade, UF e telefone principal são pré-preenchidos quando vazios.
+- **Novos endpoints**: `GET /api/contacts/cep/:cep` (endereço por CEP), `GET /api/contacts/company-roles`, `GET/POST /api/contacts/:id/people`, `PATCH/DELETE /api/contacts/:id/people/:personId` e `GET /api/users/options` (usuários ativos reduzidos a id/nome/e-mail para seletores de responsável, sem exigir permissão de administração de usuários).
+- **Filtros na listagem de contatos**: `contract_active` e `account_manager_user_id` (carteira do gerente). A busca textual passa a considerar cidade e os telefones da empresa.
+
+### Alterado
+
+- A aba **Empresas** da tela de Contatos passa a mostrar Cidade/UF, Gerente de contas e o status do contrato.
+- O editor de **campos personalizados** foi extraído para um componente próprio e agora aparece também no cadastro de empresa.
+- `core:contatos:editar` passa a ser exigido para vincular/desvincular contatos de uma empresa e alterar papéis.
+
+### Operação
+
+- Nova migração de banco: execute `npm run migrate:up`. Ela adiciona as colunas de cadastro de empresa a `core.contacts` (todas opcionais ou com valor padrão, preservando as empresas já cadastradas) e cria o índice único parcial `uq_ccl_company_principal`. **Atenção:** se a base já tiver mais de um vínculo com papel exatamente `principal` na mesma empresa, a migração falha — ajuste esses vínculos antes de aplicar.
+- O autofill de CEP faz uma chamada de saída à BrasilAPI a partir do servidor, com timeout de 6 s e degradação silenciosa (o cadastro segue manual se o serviço estiver indisponível).
+
 ## [0.9.2] - 2026-09-21
 
 ### Adicionado

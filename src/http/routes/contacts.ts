@@ -22,6 +22,12 @@ import {
   listCategories, createCustomCategory, assignCategory, unassignCategory,
 } from "../../core/contacts/category-service.js";
 import { lookupCnpj } from "../../core/contacts/cnpj-lookup.js";
+import { lookupCep } from "../../core/contacts/cep-lookup.js";
+import {
+  linkCompanyPerson, unlinkCompanyPerson, setLinkRole, listPeopleOfCompany,
+  isCompanyPersonRole, COMPANY_PERSON_ROLES,
+} from "../../core/contacts/link-service.js";
+import { DomainError, ErrorCode } from "../../core/errors.js";
 import {
   createSegment,
   evaluateSegment,
@@ -41,14 +47,26 @@ import { authorize } from "../../core/iam/rbac.js";
  * @param pool - Pool de conexões.
  */
 export function registerContactRoutes(app: FastifyInstance, pool: Pool): void {
-  // Listar contatos (com rótulos), filtrando por tipo e/ou texto.
-  app.get<{ Querystring: { type?: "pessoa" | "empresa"; search?: string } }>(
+  // Listar contatos (com rótulos), filtrando por tipo, texto, status de
+  // contrato e gerente de contas.
+  app.get<{
+    Querystring: {
+      type?: "pessoa" | "empresa";
+      search?: string;
+      contract_active?: string;
+      account_manager_user_id?: string;
+    };
+  }>(
     "/api/contacts",
     async (request, reply) => {
+      const q = request.query;
       const items = await withTransaction(pool, (client) =>
         listContacts(client, {
-          type: request.query.type,
-          search: request.query.search,
+          type: q.type,
+          search: q.search,
+          // Querystring chega como string: só filtra quando explicitamente informado.
+          contractActive: q.contract_active === undefined ? undefined : q.contract_active === "true",
+          accountManagerUserId: q.account_manager_user_id,
         }),
       );
       return reply.send(items);
@@ -62,6 +80,20 @@ export function registerContactRoutes(app: FastifyInstance, pool: Pool): void {
       return reply.status(404).send({ code: "CNPJ_NOT_FOUND", message: "CNPJ não encontrado ou serviço indisponível.", details: {} });
     }
     return reply.send(data);
+  });
+
+  // Consulta de CEP para autofill de endereço (logradouro, bairro, cidade, UF).
+  app.get<{ Params: { cep: string } }>("/api/contacts/cep/:cep", async (request, reply) => {
+    const data = await lookupCep(request.params.cep);
+    if (!data) {
+      return reply.status(404).send({ code: "CEP_NOT_FOUND", message: "CEP não encontrado ou serviço indisponível.", details: {} });
+    }
+    return reply.send(data);
+  });
+
+  // Vocabulário de papéis do vínculo empresa↔pessoa (para a UI montar o select).
+  app.get("/api/contacts/company-roles", async (_request, reply) => {
+    return reply.send({ roles: COMPANY_PERSON_ROLES });
   });
 
   // Categorias (rótulos): listar e criar.
@@ -125,6 +157,52 @@ export function registerContactRoutes(app: FastifyInstance, pool: Pool): void {
     await withTransaction(pool, (client) => deleteContact(client, request.params.id));
     return reply.status(204).send();
   });
+
+  // --- Contatos vinculados a uma empresa (responsável principal, técnico, ...) ---
+
+  // Listar as pessoas vinculadas a uma empresa, com seus papéis.
+  app.get<{ Params: { id: string } }>("/api/contacts/:id/people", async (request, reply) => {
+    const people = await withTransaction(pool, (c) => listPeopleOfCompany(c, request.params.id));
+    return reply.send(people);
+  });
+
+  // Vincular uma pessoa a uma empresa com um papel do vocabulário canônico.
+  app.post<{ Params: { id: string }; Body: { person_id: string; role?: string } }>(
+    "/api/contacts/:id/people",
+    async (request, reply) => {
+      const role = assertCanonicalRole(request.body.role);
+      const link = await withTransaction(pool, async (c) => {
+        await authorize(c, request.userId, "core:contatos:editar");
+        return linkCompanyPerson(c, request.params.id, request.body.person_id, role);
+      });
+      return reply.status(201).send(link);
+    },
+  );
+
+  // Alterar o papel de uma pessoa já vinculada à empresa.
+  app.patch<{ Params: { id: string; personId: string }; Body: { role?: string | null } }>(
+    "/api/contacts/:id/people/:personId",
+    async (request, reply) => {
+      const role = assertCanonicalRole(request.body.role);
+      const link = await withTransaction(pool, async (c) => {
+        await authorize(c, request.userId, "core:contatos:editar");
+        return setLinkRole(c, request.params.id, request.params.personId, role ?? null);
+      });
+      return reply.send(link);
+    },
+  );
+
+  // Desvincular uma pessoa da empresa.
+  app.delete<{ Params: { id: string; personId: string } }>(
+    "/api/contacts/:id/people/:personId",
+    async (request, reply) => {
+      await withTransaction(pool, async (c) => {
+        await authorize(c, request.userId, "core:contatos:editar");
+        await unlinkCompanyPerson(c, request.params.id, request.params.personId);
+      });
+      return reply.status(204).send();
+    },
+  );
 
   // --- Campos personalizados (definições) ---
 
@@ -213,4 +291,25 @@ export function registerContactRoutes(app: FastifyInstance, pool: Pool): void {
     const ids = await withTransaction(pool, (client) => evaluateSegment(client, request.body));
     return reply.send({ contact_ids: ids });
   });
+}
+
+/**
+ * Valida que o papel informado pertence ao vocabulário canônico de vínculos
+ * empresa↔pessoa. A coluna aceita texto livre por compatibilidade, mas a API
+ * pública só oferece os papéis conhecidos, para manter os dados consistentes.
+ *
+ * @param role - Papel recebido no corpo da requisição.
+ * @returns O papel validado, ou `undefined` se não informado.
+ * @throws {DomainError} `LINK_INVALID_ROLE` se o papel não for reconhecido.
+ */
+function assertCanonicalRole(role: string | null | undefined): string | undefined {
+  if (role == null || role.trim() === "") return undefined;
+  if (!isCompanyPersonRole(role)) {
+    throw new DomainError(
+      ErrorCode.LINK_INVALID_ROLE,
+      `Papel inválido. Use um destes: ${COMPANY_PERSON_ROLES.join(", ")}.`,
+      { role, allowed: COMPANY_PERSON_ROLES },
+    );
+  }
+  return role;
 }

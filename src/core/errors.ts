@@ -55,6 +55,12 @@ export const ErrorCode = {
   CONTACT_MISSING_FIELD: "CONTACT_MISSING_FIELD",
   /** E-mail de contato em formato inválido (Req 1.5). */
   CONTACT_INVALID_EMAIL: "CONTACT_INVALID_EMAIL",
+  /** CEP da empresa fora do formato de 8 dígitos (Req 1.4). */
+  CONTACT_INVALID_ZIP_CODE: "CONTACT_INVALID_ZIP_CODE",
+  /** UF da empresa fora do formato de 2 letras (Req 1.4). */
+  CONTACT_INVALID_STATE: "CONTACT_INVALID_STATE",
+  /** Gerente de contas informado não existe em core.users (Req 1.4). */
+  CONTACT_MANAGER_NOT_FOUND: "CONTACT_MANAGER_NOT_FOUND",
   /** Pessoa duplicada por e-mail (Req 5.1, 5.2). */
   CONTACT_DUPLICATE_EMAIL: "CONTACT_DUPLICATE_EMAIL",
   /** Empresa duplicada por documento fiscal (Req 5.3, 5.4). */
@@ -67,6 +73,8 @@ export const ErrorCode = {
   LINK_DUPLICATE: "LINK_DUPLICATE",
   /** Papel do vínculo fora do tamanho permitido 1..100 (Req 2.3). */
   LINK_INVALID_ROLE: "LINK_INVALID_ROLE",
+  /** A empresa já possui um responsável principal (papel `principal` é único). */
+  LINK_PRINCIPAL_EXISTS: "LINK_PRINCIPAL_EXISTS",
   /** Categoria customizada com nome já existente (Req 3.5). */
   CATEGORY_DUPLICATE_NAME: "CATEGORY_DUPLICATE_NAME",
   /** Nome de categoria vazio/em branco. */

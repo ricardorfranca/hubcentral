@@ -63,6 +63,30 @@ export async function listUsers(client: PoolClient): Promise<IamUser[]> {
   return rows;
 }
 
+/** Usuário reduzido ao necessário para preencher um seletor na interface. */
+export interface UserOption {
+  id: string;
+  full_name: string;
+  email: string;
+}
+
+/**
+ * Lista os usuários ATIVOS reduzidos a `id`/nome/e-mail, para alimentar
+ * seletores de responsável (ex.: gerente de contas de uma empresa) sem exigir
+ * a permissão de administração de usuários nem expor papel/status/senha.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @returns Usuários ativos ordenados por nome.
+ */
+export async function listUserOptions(client: PoolClient): Promise<UserOption[]> {
+  const { rows } = await client.query<UserOption>(
+    `SELECT id, full_name, email FROM core.users
+     WHERE status = 'active'
+     ORDER BY full_name, email`,
+  );
+  return rows;
+}
+
 /**
  * Altera o papel (nível de acesso) de um usuário (Req §2.2). Auditado.
  *

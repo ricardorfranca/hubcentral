@@ -152,12 +152,21 @@ Autenticação por Bearer token de sessão (obtido no login). Rotas protegidas e
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
+| GET | `/api/contacts` | Listar; filtros `type`, `search`, `contract_active`, `account_manager_user_id` |
 | POST | `/api/contacts` | Criar contato (pessoa/empresa) |
 | GET | `/api/contacts/:id` | Obter contato |
 | PATCH | `/api/contacts/:id` | Atualizar (publica `core.contato.atualizado`) |
 | DELETE | `/api/contacts/:id` | Excluir (bloqueado se referenciado) |
+| GET | `/api/contacts/cnpj/:cnpj` | Dados oficiais do CNPJ para autofill (BrasilAPI) |
+| GET | `/api/contacts/cep/:cep` | Endereço do CEP para autofill (BrasilAPI) |
+| GET | `/api/contacts/company-roles` | Vocabulário de papéis do vínculo empresa↔pessoa |
+| GET/POST | `/api/contacts/:id/people` | Contatos vinculados à empresa / vincular com papel |
+| PATCH/DELETE | `/api/contacts/:id/people/:personId` | Alterar papel / desvincular |
+| GET | `/api/users/options` | Usuários ativos (id/nome/e-mail) para o seletor de gerente de contas |
 | POST | `/api/segments` | Criar segmento persistido |
 | POST | `/api/segments/evaluate` | Avaliar critérios (retorna `contact_id`) |
+
+**Cadastro de empresa.** Além de razão social e CNPJ (obrigatórios), `core.contacts` guarda os dados cadastrais oficiais: `contract_active` (cliente com contrato ativo ou não), `state_tax_id` (inscrição estadual), `website`, endereço (`zip_code`, `street_address`, `address_number`, `address_complement`, `neighborhood`, `city`, `state`), dois telefones principais com marcação de WhatsApp (`phone_primary`/`phone_primary_is_whatsapp`, `phone_secondary`/`phone_secondary_is_whatsapp`) e o gerente de contas (`account_manager_user_id` → `core.users`). CEP é normalizado para 8 dígitos, UF para 2 letras maiúsculas e o site ganha esquema `https://` quando omitido. Os papéis dos contatos vinculados à empresa são `principal` (responsável principal, único por empresa), `tecnico`, `portabilidade` e `extra`. Esses campos moram no núcleo — o Contrato de Módulos proíbe copiá-los para schemas `mod_*`.
 
 ### CRM (`mod_crm`)
 
@@ -334,7 +343,7 @@ Implementado e coberto por testes (property-based + integração):
 - **IAM** — credenciais (scrypt), papéis, sessões por token, convite com senha temporária, primeiro acesso, cooldown de reenvio.
 - **CRM 2.0 (Receita Previsível, B2B)** — contas (empresas) permanentes referenciando a Base Central; oportunidades efêmeras com MRR + valor único e ARR derivado; pipeline de estágios configuráveis com probabilidade e SLA; atividades (cadência de vendas); forecast ponderado e dashboards; timeline, mensageria, campanhas e relatórios.
 - **Projetos Internos 2.0** — projetos com dono/membros (IAM), prazo e valor/hora; Kanban de 3 colunas com prazo, responsável único, visibilidade e dependência entre tarefas; Gantt; apontamento de tempo por comentário com totais; recursos/custos; anotação automática ao mover; anexos; desarquivar; relatório executivo em PDF; dashboard do superadmin; notificações in-app aos envolvidos.
-- **Contatos (Base Central)** — tela de gestão de pessoas e empresas (leads ou não) com rótulos e busca; autofill de CNPJ (BrasilAPI); telefone padronizado BR (+55, E.164). É a fonte única referenciada por CRM, Projetos e campanhas.
+- **Contatos (Base Central)** — tela de gestão de pessoas e empresas (leads ou não) com rótulos e busca; autofill de CNPJ e de CEP (BrasilAPI); telefone padronizado BR (+55, E.164). O cadastro de empresa cobre os dados oficiais (status do contrato, endereço completo, inscrição estadual, site, dois telefones com marcação de WhatsApp), o **gerente de contas** (usuário do sistema) e os **contatos vinculados por papel** (responsável principal, técnico, portabilidade e extra). É a fonte única referenciada por CRM, Projetos e campanhas.
 - **Campanhas** — segmentação por etiquetas e disparo multicanal (Email/WhatsApp/SMS) com status, assunto, formato texto/HTML e variáveis; SMS via Clickatell ou GoIP.
 - **Núcleo — Notificações, Configurações, E-mail, SMS e Backup** — Central de Notificações in-app reutilizável; Central de Configurações por módulo (persistido → default → env); envio de e-mail SMTP e SMS (Clickatell/GoIP) com teste; backup/restore (banco + anexos) para o superadmin. Identidade visual (nome, logo, cores) e modo escuro no portal.
 - **Infraestrutura** — API HTTP (Fastify), worker de despacho do outbox.

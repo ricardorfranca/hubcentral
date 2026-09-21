@@ -5,6 +5,9 @@
  * Gestão da Base Central de Contatos: lista pessoas e empresas (leads ou não),
  * com busca, rótulos (labels) e criação. É a fundação de contatos reutilizada
  * por CRM, Projetos e campanhas.
+ *
+ * O cadastro de empresa (dados oficiais, endereço, telefones, gerente de contas
+ * e contatos vinculados por papel) vive em {@link ./CompanyDialog}.
  */
 
 import { useState } from "react";
@@ -12,23 +15,25 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Box, Typography, Stack, Button, Tabs, Tab, TextField, Table, TableBody, TableCell, TableHead,
   TableRow, Paper, TableContainer, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions,
-  Chip, MenuItem, Alert, IconButton, Tooltip, Divider, Switch, FormControlLabel,
+  Chip, MenuItem, Alert, IconButton, Tooltip, Divider,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import TuneIcon from "@mui/icons-material/Tune";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import CallIcon from "@mui/icons-material/Call";
 import SmsIcon from "@mui/icons-material/Sms";
-import DeleteIcon from "@mui/icons-material/Delete";
 import {
-  listContacts, createPerson, createCompany, listLabels, createLabel, assignLabel, unassignLabel,
-  lookupCnpj, type ContactListItem,
-  listCustomFieldDefs, listContactCustomFields, setContactCustomField, clearContactCustomField,
-  type CustomFieldDataType,
+  listContacts, createPerson, listLabels, createLabel, assignLabel, unassignLabel,
+  type ContactListItem,
 } from "../../core/api/contacts.js";
 import { sendWhatsapp, sendSms, requestCall } from "../../core/api/comms.js";
 import { PhoneField } from "../../core/ui/PhoneField.js";
 import { ApiError } from "../../core/api/client.js";
+import { CustomFieldsEditor, type FieldFeedback } from "./CustomFieldsEditor.js";
+import { NewCompanyDialog, CompanyDetailDialog } from "./CompanyDialog.js";
+
+/** Opções do filtro de status de contrato da aba Empresas. */
+type ContractFilter = "todos" | "ativos" | "inativos";
 
 /**
  * Página de gestão de contatos.
@@ -39,16 +44,22 @@ export function ContactsPage(): JSX.Element {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"pessoa" | "empresa">("pessoa");
   const [search, setSearch] = useState("");
+  const [contractFilter, setContractFilter] = useState<ContractFilter>("todos");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detailContact, setDetailContact] = useState<ContactListItem | null>(null);
 
+  // O filtro de contrato só se aplica à aba Empresas.
+  const contractActive =
+    tab === "empresa" && contractFilter !== "todos" ? contractFilter === "ativos" : undefined;
+
   const { data: contacts, isLoading } = useQuery({
-    queryKey: ["contacts", tab, search],
-    queryFn: () => listContacts({ type: tab, search: search || undefined }),
+    queryKey: ["contacts", tab, search, contractActive],
+    queryFn: () => listContacts({ type: tab, search: search || undefined, contractActive }),
   });
   const { data: labels } = useQuery({ queryKey: ["contacts", "labels"], queryFn: listLabels });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["contacts"] });
+  const columnCount = tab === "pessoa" ? 5 : 7;
 
   return (
     <Box>
@@ -64,6 +75,20 @@ export function ContactsPage(): JSX.Element {
           <Tab label="Pessoas" value="pessoa" />
           <Tab label="Empresas" value="empresa" />
         </Tabs>
+        {tab === "empresa" && (
+          <TextField
+            select
+            size="small"
+            label="Contrato"
+            value={contractFilter}
+            onChange={(e) => setContractFilter(e.target.value as ContractFilter)}
+            sx={{ ml: 2, width: 180 }}
+          >
+            <MenuItem value="todos">Todos</MenuItem>
+            <MenuItem value="ativos">Contrato ativo</MenuItem>
+            <MenuItem value="inativos">Sem contrato ativo</MenuItem>
+          </TextField>
+        )}
         <TextField size="small" placeholder="Buscar…" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ ml: "auto", width: 280 }} />
       </Stack>
 
@@ -76,7 +101,15 @@ export function ContactsPage(): JSX.Element {
               <TableRow>
                 <TableCell>{tab === "pessoa" ? "Nome" : "Razão social"}</TableCell>
                 <TableCell>{tab === "pessoa" ? "E-mail" : "CNPJ"}</TableCell>
-                {tab === "pessoa" && <TableCell>Telefone</TableCell>}
+                {tab === "pessoa" ? (
+                  <TableCell>Telefone</TableCell>
+                ) : (
+                  <>
+                    <TableCell>Cidade/UF</TableCell>
+                    <TableCell>Gerente de contas</TableCell>
+                    <TableCell>Contrato</TableCell>
+                  </>
+                )}
                 <TableCell>Rótulos</TableCell>
                 <TableCell align="right">Ações</TableCell>
               </TableRow>
@@ -86,15 +119,28 @@ export function ContactsPage(): JSX.Element {
                 <ContactRow key={c.id} contact={c} labels={labels ?? []} onChange={invalidate} onOpen={() => setDetailContact(c)} />
               ))}
               {(contacts ?? []).length === 0 && (
-                <TableRow><TableCell colSpan={5}><Typography color="text.secondary">Nenhum contato.</Typography></TableCell></TableRow>
+                <TableRow><TableCell colSpan={columnCount}><Typography color="text.secondary">Nenhum contato.</Typography></TableCell></TableRow>
               )}
             </TableBody>
           </Table>
         </TableContainer>
       )}
 
-      <NewContactDialog type={tab} open={dialogOpen} onClose={() => setDialogOpen(false)} onDone={invalidate} />
-      {detailContact && <ContactDetailDialog contact={detailContact} onClose={() => setDetailContact(null)} />}
+      {tab === "pessoa" ? (
+        <NewPersonDialog open={dialogOpen} onClose={() => setDialogOpen(false)} onDone={invalidate} />
+      ) : (
+        <NewCompanyDialog open={dialogOpen} onClose={() => setDialogOpen(false)} onDone={invalidate} />
+      )}
+
+      {detailContact && (detailContact.contact_type === "empresa" ? (
+        <CompanyDetailDialog
+          company={detailContact}
+          onClose={() => setDetailContact(null)}
+          onSaved={invalidate}
+        />
+      ) : (
+        <ContactDetailDialog contact={detailContact} onClose={() => setDetailContact(null)} />
+      ))}
     </Box>
   );
 }
@@ -117,12 +163,28 @@ function ContactRow({ contact, labels, onChange, onOpen }: { contact: ContactLis
 
   const [adding, setAdding] = useState(false);
   const available = labels.filter((l) => !contact.labels.some((cl) => cl.id === l.id));
+  const isPerson = contact.contact_type === "pessoa";
+  const location = [contact.city, contact.state].filter(Boolean).join("/");
 
   return (
     <TableRow hover>
-      <TableCell>{contact.contact_type === "pessoa" ? contact.full_name : contact.legal_name}</TableCell>
-      <TableCell>{contact.contact_type === "pessoa" ? contact.email : contact.fiscal_document}</TableCell>
-      {contact.contact_type === "pessoa" && <TableCell>{contact.phone ?? "—"}</TableCell>}
+      <TableCell>{isPerson ? contact.full_name : contact.legal_name}</TableCell>
+      <TableCell>{isPerson ? contact.email : contact.fiscal_document}</TableCell>
+      {isPerson ? (
+        <TableCell>{contact.phone ?? "—"}</TableCell>
+      ) : (
+        <>
+          <TableCell>{location || "—"}</TableCell>
+          <TableCell>{contact.account_manager_name ?? "—"}</TableCell>
+          <TableCell>
+            <Chip
+              size="small"
+              color={contact.contract_active ? "success" : "default"}
+              label={contact.contract_active ? "Ativo" : "Inativo"}
+            />
+          </TableCell>
+        </>
+      )}
       <TableCell>
         <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap alignItems="center">
           {contact.labels.map((l) => (
@@ -157,7 +219,7 @@ function ContactRow({ contact, labels, onChange, onOpen }: { contact: ContactLis
         </Stack>
       </TableCell>
       <TableCell align="right">
-        <Tooltip title="Detalhes, ações e campos personalizados">
+        <Tooltip title={isPerson ? "Detalhes, ações e campos personalizados" : "Dados cadastrais, contatos vinculados e campos personalizados"}>
           <IconButton size="small" onClick={onOpen}><TuneIcon fontSize="small" /></IconButton>
         </Tooltip>
       </TableCell>
@@ -165,61 +227,32 @@ function ContactRow({ contact, labels, onChange, onOpen }: { contact: ContactLis
   );
 }
 
-/** Diálogo de criação de pessoa ou empresa. */
-function NewContactDialog({
-  type, open, onClose, onDone,
+/** Diálogo de criação de pessoa. */
+function NewPersonDialog({
+  open, onClose, onDone,
 }: {
-  type: "pessoa" | "empresa"; open: boolean; onClose: () => void; onDone: () => void;
+  open: boolean; onClose: () => void; onDone: () => void;
 }): JSX.Element {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [legalName, setLegalName] = useState("");
-  const [cnpj, setCnpj] = useState("");
-  const [lookup, setLookup] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const create = useMutation({
-    mutationFn: () => type === "pessoa"
-      ? createPerson({ full_name: fullName.trim(), email: email.trim(), phone })
-      : createCompany({ legal_name: legalName.trim(), fiscal_document: cnpj.replace(/\D/g, "") }),
-    onSuccess: () => { onDone(); onClose(); setFullName(""); setEmail(""); setPhone(""); setLegalName(""); setCnpj(""); },
+    mutationFn: () => createPerson({ full_name: fullName.trim(), email: email.trim(), phone }),
+    onSuccess: () => { onDone(); onClose(); setFullName(""); setEmail(""); setPhone(""); },
     onError: (e) => setError(e instanceof ApiError ? e.message : "Falha ao criar contato."),
   });
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{type === "pessoa" ? "Nova pessoa" : "Nova empresa"}</DialogTitle>
+      <DialogTitle>Nova pessoa</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
-          {type === "pessoa" ? (
-            <>
-              <TextField label="Nome completo" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
-              <TextField label="E-mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-              <PhoneField label="Telefone" value={phone} onChange={setPhone} required />
-            </>
-          ) : (
-            <>
-              <TextField
-                label="CNPJ"
-                value={cnpj}
-                onChange={(e) => setCnpj(e.target.value)}
-                onBlur={async () => {
-                  if (cnpj.replace(/\D/g, "").length !== 14) return;
-                  setLookup(true);
-                  const data = await lookupCnpj(cnpj);
-                  setLookup(false);
-                  if (data?.legal_name && !legalName) setLegalName(data.legal_name);
-                }}
-                placeholder="00.000.000/0000-00"
-                helperText={lookup ? "Consultando dados oficiais…" : "Ao sair do campo, buscamos os dados oficiais (editáveis)."}
-                required
-                autoFocus
-              />
-              <TextField label="Razão social" value={legalName} onChange={(e) => setLegalName(e.target.value)} required />
-            </>
-          )}
+          <TextField label="Nome completo" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+          <TextField label="E-mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <PhoneField label="Telefone" value={phone} onChange={setPhone} required />
         </Stack>
       </DialogContent>
       <DialogActions>
@@ -231,15 +264,13 @@ function NewContactDialog({
 }
 
 /**
- * Diálogo de detalhes do contato: ações de comunicação (WhatsApp, ligação via
- * PABX, SMS) e edição dos campos personalizados. Reúne #5 (valores de campos
- * personalizados) e #6 (botões de ação) num único lugar.
+ * Diálogo de detalhes de uma PESSOA: ações de comunicação (WhatsApp, ligação
+ * via PABX, SMS) e edição dos campos personalizados.
  */
 function ContactDetailDialog({ contact, onClose }: { contact: ContactListItem; onClose: () => void }): JSX.Element {
-  const isPerson = contact.contact_type === "pessoa";
   const phone = contact.phone ?? "";
-  const displayName = isPerson ? contact.full_name ?? "" : contact.legal_name ?? "";
-  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+  const displayName = contact.full_name ?? "";
+  const [feedback, setFeedback] = useState<FieldFeedback | null>(null);
   const [waText, setWaText] = useState("");
   const [smsText, setSmsText] = useState("");
 
@@ -266,32 +297,30 @@ function ContactDetailDialog({ contact, onClose }: { contact: ContactListItem; o
         <Stack spacing={2} sx={{ mt: 1 }}>
           {feedback && <Alert severity={feedback.ok ? "success" : "error"} onClose={() => setFeedback(null)}>{feedback.text}</Alert>}
 
-          {isPerson && (
-            <Box>
-              <Typography variant="subtitle2" gutterBottom>Ações de comunicação</Typography>
-              {phone ? (
-                <>
-                  <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
-                    <Button size="small" variant="outlined" color="success" startIcon={<WhatsAppIcon />} onClick={() => wa.mutate()} disabled={wa.isPending}>
-                      WhatsApp
-                    </Button>
-                    <Button size="small" variant="outlined" startIcon={<CallIcon />} onClick={() => call.mutate()} disabled={call.isPending}>
-                      Ligar
-                    </Button>
-                    <Button size="small" variant="outlined" startIcon={<SmsIcon />} onClick={() => sms.mutate()} disabled={sms.isPending}>
-                      SMS
-                    </Button>
-                  </Stack>
-                  <Stack spacing={1}>
-                    <TextField size="small" label="Mensagem de WhatsApp (opcional)" value={waText} onChange={(e) => setWaText(e.target.value)} fullWidth />
-                    <TextField size="small" label="Texto do SMS (opcional)" value={smsText} onChange={(e) => setSmsText(e.target.value)} fullWidth />
-                  </Stack>
-                </>
-              ) : (
-                <Typography variant="caption" color="text.secondary">Sem telefone cadastrado para este contato.</Typography>
-              )}
-            </Box>
-          )}
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Ações de comunicação</Typography>
+            {phone ? (
+              <>
+                <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+                  <Button size="small" variant="outlined" color="success" startIcon={<WhatsAppIcon />} onClick={() => wa.mutate()} disabled={wa.isPending}>
+                    WhatsApp
+                  </Button>
+                  <Button size="small" variant="outlined" startIcon={<CallIcon />} onClick={() => call.mutate()} disabled={call.isPending}>
+                    Ligar
+                  </Button>
+                  <Button size="small" variant="outlined" startIcon={<SmsIcon />} onClick={() => sms.mutate()} disabled={sms.isPending}>
+                    SMS
+                  </Button>
+                </Stack>
+                <Stack spacing={1}>
+                  <TextField size="small" label="Mensagem de WhatsApp (opcional)" value={waText} onChange={(e) => setWaText(e.target.value)} fullWidth />
+                  <TextField size="small" label="Texto do SMS (opcional)" value={smsText} onChange={(e) => setSmsText(e.target.value)} fullWidth />
+                </Stack>
+              </>
+            ) : (
+              <Typography variant="caption" color="text.secondary">Sem telefone cadastrado para este contato.</Typography>
+            )}
+          </Box>
 
           <Divider />
 
@@ -305,106 +334,5 @@ function ContactDetailDialog({ contact, onClose }: { contact: ContactListItem; o
         <Button onClick={onClose}>Fechar</Button>
       </DialogActions>
     </Dialog>
-  );
-}
-
-/**
- * Editor dos valores de campos personalizados de um contato. Lista todas as
- * definições e permite atribuir/limpar valores conforme o tipo.
- */
-function CustomFieldsEditor({
-  contactId, onFeedback,
-}: {
-  contactId: string; onFeedback: (f: { ok: boolean; text: string }) => void;
-}): JSX.Element {
-  const qc = useQueryClient();
-  const { data: defs } = useQuery({ queryKey: ["custom-fields"], queryFn: listCustomFieldDefs });
-  const { data: values, isLoading } = useQuery({
-    queryKey: ["contacts", contactId, "custom-fields"],
-    queryFn: () => listContactCustomFields(contactId),
-  });
-
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["contacts", contactId, "custom-fields"] });
-
-  const save = useMutation({
-    mutationFn: ({ fieldId, value }: { fieldId: string; value: unknown }) => setContactCustomField(contactId, fieldId, value),
-    onSuccess: () => { invalidate(); onFeedback({ ok: true, text: "Campo salvo." }); },
-    onError: (e) => onFeedback({ ok: false, text: e instanceof ApiError ? e.message : "Falha ao salvar campo." }),
-  });
-  const clear = useMutation({
-    mutationFn: (fieldId: string) => clearContactCustomField(contactId, fieldId),
-    onSuccess: () => { invalidate(); onFeedback({ ok: true, text: "Campo removido." }); },
-  });
-
-  if (isLoading) return <CircularProgress size={20} />;
-  if ((defs ?? []).length === 0) {
-    return <Typography variant="caption" color="text.secondary">Nenhum campo cadastrado. Crie em Administração → Campos personalizados.</Typography>;
-  }
-
-  const valueByField = new Map((values ?? []).map((v) => [v.field_id, v.value]));
-
-  return (
-    <Stack spacing={1.5}>
-      {(defs ?? []).map((d) => (
-        <CustomFieldRow
-          key={d.id}
-          name={d.name}
-          dataType={d.data_type}
-          current={valueByField.get(d.id)}
-          onSave={(value) => save.mutate({ fieldId: d.id, value })}
-          onClear={() => clear.mutate(d.id)}
-        />
-      ))}
-    </Stack>
-  );
-}
-
-/** Uma linha de edição de campo personalizado, tipada conforme o data_type. */
-function CustomFieldRow({
-  name, dataType, current, onSave, onClear,
-}: {
-  name: string;
-  dataType: CustomFieldDataType;
-  current: unknown;
-  onSave: (value: unknown) => void;
-  onClear: () => void;
-}): JSX.Element {
-  const [text, setText] = useState(() => {
-    if (current == null) return "";
-    return dataType === "boolean" ? "" : String(current);
-  });
-  const [bool, setBool] = useState<boolean>(current === true);
-
-  function commit(): void {
-    if (dataType === "text") onSave(text);
-    else if (dataType === "number") { const n = Number(text); if (Number.isFinite(n)) onSave(n); }
-    else if (dataType === "date") onSave(text); // YYYY-MM-DD; validado no backend
-  }
-
-  return (
-    <Stack direction="row" spacing={1} alignItems="center">
-      <Typography variant="body2" sx={{ minWidth: 160 }}>{name}</Typography>
-      {dataType === "boolean" ? (
-        <FormControlLabel
-          control={<Switch checked={bool} onChange={(e) => { setBool(e.target.checked); onSave(e.target.checked); }} />}
-          label={bool ? "Sim" : "Não"}
-        />
-      ) : (
-        <>
-          <TextField
-            size="small"
-            type={dataType === "number" ? "number" : dataType === "date" ? "date" : "text"}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onBlur={commit}
-            {...(dataType === "date" ? { InputLabelProps: { shrink: true } } : {})}
-            fullWidth
-          />
-          <Tooltip title="Limpar valor">
-            <IconButton size="small" onClick={onClear} aria-label={`Limpar ${name}`}><DeleteIcon fontSize="small" /></IconButton>
-          </Tooltip>
-        </>
-      )}
-    </Stack>
   );
 }

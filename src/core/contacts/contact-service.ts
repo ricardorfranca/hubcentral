@@ -10,15 +10,140 @@
 
 import type { PoolClient } from "pg";
 import { DomainError, ErrorCode } from "../errors.js";
-import type { Contact, ContactInput } from "./types.js";
-import { firstMissingRequiredField, isValidEmail } from "./validation.js";
+import type { Contact, ContactInput, CompanyRegistrationFields } from "./types.js";
+import {
+  firstMissingRequiredField,
+  isValidEmail,
+  isValidState,
+  isValidZipCode,
+  normalizeState,
+  normalizeWebsite,
+  normalizeZipCode,
+} from "./validation.js";
 import { hasActiveReferences, listModulesReferencing } from "./reference-service.js";
 import { log as auditLog } from "../audit/audit-logger.js";
 import { publish, buildEnvelope } from "../events/event-bus.js";
 
+/**
+ * Colunas de dados cadastrais que só fazem sentido para EMPRESA (Req 1.4).
+ * Fonte única usada pelo INSERT de empresa e pelo UPDATE dinâmico, para que
+ * um campo novo nunca seja aceito em um lugar e silenciosamente ignorado no outro.
+ */
+const COMPANY_COLUMNS = [
+  "contract_active",
+  "state_tax_id",
+  "website",
+  "zip_code",
+  "street_address",
+  "address_number",
+  "address_complement",
+  "neighborhood",
+  "city",
+  "state",
+  "phone_primary",
+  "phone_primary_is_whatsapp",
+  "phone_secondary",
+  "phone_secondary_is_whatsapp",
+  "account_manager_user_id",
+] as const satisfies readonly (keyof CompanyRegistrationFields)[];
+
 /** Colunas retornadas ao materializar um {@link Contact}. */
-const CONTACT_COLUMNS =
-  "id, contact_type, full_name, email, phone, legal_name, fiscal_document, merged_into, created_at, updated_at";
+const CONTACT_COLUMNS = [
+  "id",
+  "contact_type",
+  "full_name",
+  "email",
+  "phone",
+  "legal_name",
+  "fiscal_document",
+  ...COMPANY_COLUMNS,
+  "merged_into",
+  "created_at",
+  "updated_at",
+].join(", ");
+
+/** Colunas que o {@link ContactPatch} pode alterar. */
+const PATCH_COLUMNS = [
+  "full_name",
+  "email",
+  "phone",
+  "legal_name",
+  "fiscal_document",
+  ...COMPANY_COLUMNS,
+] as const;
+
+/**
+ * Normaliza e valida os dados cadastrais de empresa antes de gravar: CEP só
+ * com dígitos, UF em maiúsculas, site com esquema, strings em branco viram
+ * `null` e o gerente de contas precisa existir em `core.users`.
+ *
+ * A normalização acontece no serviço (e não só na UI) porque a API é pública:
+ * importação de contatos, integrações e scripts também passam por aqui.
+ *
+ * @param client - Cliente PostgreSQL (para validar o gerente de contas).
+ * @param fields - Campos cadastrais informados (apenas os presentes são tratados).
+ * @returns Os mesmos campos, normalizados.
+ * @throws {DomainError} `CONTACT_INVALID_ZIP_CODE` se o CEP não tiver 8 dígitos.
+ * @throws {DomainError} `CONTACT_INVALID_STATE` se a UF não tiver 2 letras.
+ * @throws {DomainError} `CONTACT_MANAGER_NOT_FOUND` se o gerente de contas não existir.
+ */
+async function normalizeCompanyFields(
+  client: PoolClient,
+  fields: CompanyRegistrationFields,
+): Promise<CompanyRegistrationFields> {
+  const out: Record<string, unknown> = { ...fields };
+
+  // Strings em branco viram null (o formulário envia "" ao limpar um campo).
+  for (const col of COMPANY_COLUMNS) {
+    const value = out[col];
+    if (typeof value === "string" && value.trim() === "") {
+      out[col] = null;
+    } else if (typeof value === "string") {
+      out[col] = value.trim();
+    }
+  }
+
+  if (fields.zip_code !== undefined) {
+    const zip = normalizeZipCode(fields.zip_code);
+    if (zip !== null && !isValidZipCode(zip)) {
+      throw new DomainError(ErrorCode.CONTACT_INVALID_ZIP_CODE, "CEP deve ter 8 dígitos.", {
+        zip_code: fields.zip_code,
+      });
+    }
+    out.zip_code = zip;
+  }
+
+  if (fields.state !== undefined) {
+    const uf = normalizeState(fields.state);
+    if (uf !== null && !isValidState(uf)) {
+      throw new DomainError(ErrorCode.CONTACT_INVALID_STATE, "UF deve ter 2 letras (ex.: SP).", {
+        state: fields.state,
+      });
+    }
+    out.state = uf;
+  }
+
+  if (fields.website !== undefined) {
+    out.website = normalizeWebsite(fields.website);
+  }
+
+  if (fields.account_manager_user_id !== undefined && out.account_manager_user_id !== null) {
+    const managerId = out.account_manager_user_id as string;
+    const { rows } = await client.query<{ id: string }>(
+      `SELECT id FROM core.users WHERE id = $1`,
+      [managerId],
+    );
+    if (!rows[0]) {
+      throw new DomainError(
+        ErrorCode.CONTACT_MANAGER_NOT_FOUND,
+        "Gerente de contas não encontrado.",
+        { account_manager_user_id: managerId },
+      );
+    }
+  }
+
+  return out as CompanyRegistrationFields;
+}
 
 /**
  * Cria um contato na Base Central de Contatos, aplicando validação de campos
@@ -83,18 +208,34 @@ export async function createContact(
   }
 
   // 4) Inserção
-  const insert =
-    input.contact_type === "pessoa"
-      ? {
-          text: `INSERT INTO core.contacts (contact_type, full_name, email, phone)
-                 VALUES ('pessoa', $1, $2, $3) RETURNING ${CONTACT_COLUMNS}`,
-          params: [input.full_name, input.email, input.phone],
-        }
-      : {
-          text: `INSERT INTO core.contacts (contact_type, legal_name, fiscal_document)
-                 VALUES ('empresa', $1, $2) RETURNING ${CONTACT_COLUMNS}`,
-          params: [input.legal_name, input.fiscal_document],
-        };
+  let insert: { text: string; params: unknown[] };
+  if (input.contact_type === "pessoa") {
+    insert = {
+      text: `INSERT INTO core.contacts (contact_type, full_name, email, phone)
+             VALUES ('pessoa', $1, $2, $3) RETURNING ${CONTACT_COLUMNS}`,
+      params: [input.full_name, input.email, input.phone],
+    };
+  } else {
+    // Empresa: razão social + documento são obrigatórios; os dados cadastrais
+    // complementares (Req 1.4) entram só quando informados, mantendo o DEFAULT
+    // do banco para os demais.
+    const company = await normalizeCompanyFields(client, input);
+    const columns = ["contact_type", "legal_name", "fiscal_document"];
+    const params: unknown[] = ["empresa", input.legal_name, input.fiscal_document];
+    for (const col of COMPANY_COLUMNS) {
+      const value = company[col];
+      if (value !== undefined) {
+        columns.push(col);
+        params.push(value);
+      }
+    }
+    const placeholders = params.map((_v, i) => `$${i + 1}`).join(", ");
+    insert = {
+      text: `INSERT INTO core.contacts (${columns.join(", ")})
+             VALUES (${placeholders}) RETURNING ${CONTACT_COLUMNS}`,
+      params,
+    };
+  }
 
   const { rows } = await client.query<Contact>(insert.text, insert.params);
   // O RETURNING garante exatamente uma linha; a asserção reflete essa invariante.
@@ -114,19 +255,33 @@ export async function createContact(
 /** Contato com rótulos (categorias) resolvidos, para listagem. */
 export interface ContactListItem extends Contact {
   labels: { id: string; name: string }[];
+  /** Nome do gerente de contas resolvido a partir de `core.users` (empresa). */
+  account_manager_name: string | null;
+}
+
+/** Filtros aceitos por {@link listContacts}. */
+export interface ListContactsOptions {
+  type?: "pessoa" | "empresa" | undefined;
+  search?: string | undefined;
+  /** Filtra empresas por status de contrato (`true` = contrato ativo). */
+  contractActive?: boolean | undefined;
+  /** Filtra pela carteira de um gerente de contas (`user_id`). */
+  accountManagerUserId?: string | undefined;
+  limit?: number | undefined;
 }
 
 /**
  * Lista contatos ativos (não mesclados), com seus rótulos, opcionalmente
- * filtrados por tipo e por texto (nome/e-mail/razão social/documento).
+ * filtrados por tipo, texto (nome/e-mail/razão social/documento/telefones/
+ * cidade), status de contrato e gerente de contas.
  *
  * @param client - Cliente PostgreSQL.
- * @param options - `type` (pessoa|empresa), `search` (texto), `limit` (default 200).
- * @returns Contatos com rótulos, ordenados por nome.
+ * @param options - Filtros de listagem; `limit` default 200.
+ * @returns Contatos com rótulos e nome do gerente, ordenados por nome.
  */
 export async function listContacts(
   client: PoolClient,
-  options: { type?: "pessoa" | "empresa" | undefined; search?: string | undefined; limit?: number | undefined } = {},
+  options: ListContactsOptions = {},
 ): Promise<ContactListItem[]> {
   const params: unknown[] = [];
   const where: string[] = ["c.merged_into IS NULL"];
@@ -138,14 +293,25 @@ export async function listContacts(
     params.push(`%${options.search.trim()}%`);
     const p = `$${params.length}`;
     where.push(
-      `(c.full_name ILIKE ${p} OR c.email::text ILIKE ${p} OR c.legal_name ILIKE ${p} OR c.fiscal_document::text ILIKE ${p} OR c.phone ILIKE ${p})`,
+      `(c.full_name ILIKE ${p} OR c.email::text ILIKE ${p} OR c.legal_name ILIKE ${p}
+        OR c.fiscal_document::text ILIKE ${p} OR c.phone ILIKE ${p}
+        OR c.phone_primary ILIKE ${p} OR c.phone_secondary ILIKE ${p} OR c.city ILIKE ${p})`,
     );
+  }
+  if (options.contractActive !== undefined) {
+    params.push(options.contractActive);
+    where.push(`c.contract_active = $${params.length}`);
+  }
+  if (options.accountManagerUserId) {
+    params.push(options.accountManagerUserId);
+    where.push(`c.account_manager_user_id = $${params.length}`);
   }
   params.push(options.limit ?? 200);
   const limitParam = `$${params.length}`;
 
   const { rows } = await client.query<ContactListItem>(
     `SELECT ${CONTACT_COLUMNS.split(", ").map((col) => `c.${col}`).join(", ")},
+            mgr.full_name AS account_manager_name,
             COALESCE(
               (SELECT json_agg(json_build_object('id', cat.id, 'name', cat.name) ORDER BY cat.name)
                FROM core.contact_category_assignments a
@@ -154,6 +320,7 @@ export async function listContacts(
               '[]'::json
             ) AS labels
      FROM core.contacts c
+     LEFT JOIN core.users mgr ON mgr.id = c.account_manager_user_id
      WHERE ${where.join(" AND ")}
      ORDER BY COALESCE(c.full_name, c.legal_name)
      LIMIT ${limitParam}`,
@@ -162,8 +329,11 @@ export async function listContacts(
   return rows;
 }
 
-/** Campos de contato que podem ser atualizados. */
-export interface ContactPatch {
+/**
+ * Campos de contato que podem ser atualizados. Para empresa, inclui todos os
+ * dados cadastrais complementares (Req 1.4).
+ */
+export interface ContactPatch extends CompanyRegistrationFields {
   full_name?: string;
   email?: string;
   phone?: string;
@@ -203,12 +373,14 @@ export async function updateContact(
     });
   }
 
+  // Normaliza/valida os dados cadastrais de empresa presentes no patch.
+  const normalized: ContactPatch = { ...patch, ...(await normalizeCompanyFields(client, patch)) };
+
   // Monta o UPDATE dinâmico apenas com os campos presentes no patch.
-  const columns = ["full_name", "email", "phone", "legal_name", "fiscal_document"] as const;
   const sets: string[] = [];
   const params: unknown[] = [];
-  for (const col of columns) {
-    const value = patch[col];
+  for (const col of PATCH_COLUMNS) {
+    const value = normalized[col];
     if (value !== undefined) {
       params.push(value);
       sets.push(`${col} = $${params.length}`);
@@ -423,7 +595,7 @@ export async function findOrCreatePerson(
  */
 export async function findOrCreateCompany(
   client: PoolClient,
-  data: { legal_name: string; fiscal_document: string },
+  data: { legal_name: string; fiscal_document: string } & CompanyRegistrationFields,
   actorUserId: string | null = null,
 ): Promise<string> {
   const existing = await findActiveCompanyByDocument(client, data.fiscal_document);

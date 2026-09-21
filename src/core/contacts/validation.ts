@@ -16,6 +16,18 @@ import type { ContactInput } from "./types.js";
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /**
+ * Padrão de CEP aceito no cadastro de empresa: exatamente 8 dígitos.
+ * Espelha o CHECK `contacts_zip_code_format` da migration.
+ */
+export const ZIP_CODE_PATTERN = /^\d{8}$/;
+
+/**
+ * Padrão de UF aceito no cadastro de empresa: 2 letras maiúsculas.
+ * Espelha o CHECK `contacts_state_format` da migration.
+ */
+export const STATE_PATTERN = /^[A-Z]{2}$/;
+
+/**
  * Indica se uma string é um e-mail válido segundo o {@link EMAIL_PATTERN}.
  *
  * @param email - String a validar.
@@ -23,6 +35,64 @@ export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
  */
 export function isValidEmail(email: string): boolean {
   return EMAIL_PATTERN.test(email);
+}
+
+/**
+ * Normaliza um CEP para apenas dígitos (máximo 8), ou `null` se vazio.
+ *
+ * @param zipCode - CEP com ou sem máscara.
+ * @returns CEP com 8 dígitos, string de dígitos parcial, ou `null`.
+ */
+export function normalizeZipCode(zipCode: string | null | undefined): string | null {
+  if (zipCode == null) return null;
+  const digits = zipCode.replace(/\D/g, "").slice(0, 8);
+  return digits === "" ? null : digits;
+}
+
+/**
+ * Indica se um CEP normalizado é válido (8 dígitos).
+ *
+ * @param zipCode - CEP já normalizado.
+ * @returns `true` se casa com {@link ZIP_CODE_PATTERN}.
+ */
+export function isValidZipCode(zipCode: string): boolean {
+  return ZIP_CODE_PATTERN.test(zipCode);
+}
+
+/**
+ * Normaliza uma UF para 2 letras maiúsculas sem acento/espaço, ou `null`.
+ *
+ * @param state - UF informada (ex.: `sp`, ` SP `).
+ * @returns UF em maiúsculas, ou `null` se vazia.
+ */
+export function normalizeState(state: string | null | undefined): string | null {
+  if (state == null) return null;
+  const upper = state.trim().toUpperCase();
+  return upper === "" ? null : upper;
+}
+
+/**
+ * Indica se uma UF normalizada é válida (2 letras maiúsculas).
+ *
+ * @param state - UF já normalizada.
+ * @returns `true` se casa com {@link STATE_PATTERN}.
+ */
+export function isValidState(state: string): boolean {
+  return STATE_PATTERN.test(state);
+}
+
+/**
+ * Normaliza um endereço de site: remove espaços e prefixa `https://` quando o
+ * usuário digita apenas o domínio. Retorna `null` se vazio.
+ *
+ * @param website - Site informado (ex.: `empresa.com.br`).
+ * @returns URL normalizada, ou `null`.
+ */
+export function normalizeWebsite(website: string | null | undefined): string | null {
+  if (website == null) return null;
+  const trimmed = website.trim();
+  if (trimmed === "") return null;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
 /**
