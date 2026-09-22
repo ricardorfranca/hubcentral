@@ -172,7 +172,7 @@ Autenticação por Bearer token de sessão (obtido no login). Rotas protegidas e
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| GET/POST | `/api/crm/accounts` | Listar/criar contas (empresa via CNPJ) |
+| GET/POST | `/api/crm/accounts` | Listar/criar contas (empresa via CNPJ; `company` opcional grava os dados oficiais) |
 | GET | `/api/crm/accounts/:id` | Conta com contatos vinculados |
 | POST | `/api/crm/accounts/:id/contacts` | Vincular contato (pessoa) à conta |
 | GET/POST | `/api/crm/opportunities` | Listar (com filtros)/criar oportunidades |

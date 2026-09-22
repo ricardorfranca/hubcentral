@@ -9,6 +9,7 @@
 import type { PoolClient } from "pg";
 import { DomainError, ErrorCode } from "../../core/errors.js";
 import { findOrCreateCompany } from "../../core/contacts/contact-service.js";
+import type { CompanyRegistrationFields } from "../../core/contacts/types.js";
 import { registerReference } from "../../core/contacts/reference-service.js";
 import { log as auditLog } from "../../core/audit/audit-logger.js";
 
@@ -36,8 +37,12 @@ function isValidCnpj(cnpj: string): boolean {
  * da empresa em `core.contacts` e registra a referência do módulo. Se já existir
  * conta para a empresa, retorna a existente (idempotente por empresa).
  *
+ * Os dados cadastrais oficiais (`company`) só são aplicados quando a empresa é
+ * CRIADA agora. Se ela já existe na Base Central, o cadastro dela é preservado —
+ * o CRM não sobrescreve dados do núcleo.
+ *
  * @param client - Cliente PostgreSQL.
- * @param input - Dados da conta (razão social, CNPJ, comerciais).
+ * @param input - Dados da conta (razão social, CNPJ, comerciais) e cadastrais da empresa.
  * @param actorUserId - Autor.
  * @returns A conta criada ou existente.
  * @throws {DomainError} `CRM_INVALID_CNPJ` se o CNPJ for inválido.
@@ -50,6 +55,8 @@ export async function createAccount(
     segment?: string | undefined;
     sizeTier?: string | undefined;
     ownerUserId?: string | undefined;
+    /** Dados cadastrais oficiais da empresa (autofill por CNPJ), se houver. */
+    company?: CompanyRegistrationFields | undefined;
   },
   actorUserId: string | null = null,
 ): Promise<Account> {
@@ -63,7 +70,7 @@ export async function createAccount(
   // Empresa na Base Central (fonte de verdade); find-or-create por documento.
   const companyId = await findOrCreateCompany(
     client,
-    { legal_name: input.legalName, fiscal_document: cnpj },
+    { ...(input.company ?? {}), legal_name: input.legalName, fiscal_document: cnpj },
     actorUserId,
   );
   await registerReference(client, "mod_crm", "accounts", companyId);

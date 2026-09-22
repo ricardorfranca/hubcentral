@@ -18,7 +18,9 @@ import AddIcon from "@mui/icons-material/Add";
 import { useAccount, useAccounts, useCreateAccount, useCreateOpportunity, useLinkContact } from "./sales-hooks.js";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Origin, Qualification } from "../../core/api/crm-sales.js";
-import { createPerson, lookupCnpj } from "../../core/api/contacts.js";
+import {
+  createPerson, lookupCnpj, companyFieldsFromCnpj, type CnpjData,
+} from "../../core/api/contacts.js";
 import { PhoneField } from "../../core/ui/PhoneField.js";
 import { ApiError } from "../../core/api/client.js";
 
@@ -59,6 +61,10 @@ export function NewOpportunityDialog({ open, onClose, accountId }: Props): JSX.E
   const [companyCnpj, setCompanyCnpj] = useState("");
   const [lookingUpCnpj, setLookingUpCnpj] = useState(false);
   const [companyNameEdited, setCompanyNameEdited] = useState(false);
+  /** Dados oficiais encontrados para o CNPJ (gravados junto da empresa). */
+  const [cnpjData, setCnpjData] = useState<CnpjData | null>(null);
+  /** `true` quando a consulta ao CNPJ foi feita e não retornou nada. */
+  const [cnpjNotFound, setCnpjNotFound] = useState(false);
 
   const [showNewContact, setShowNewContact] = useState(false);
   const [contactName, setContactName] = useState("");
@@ -77,16 +83,27 @@ export function NewOpportunityDialog({ open, onClose, accountId }: Props): JSX.E
     setShowNewContact(false);
   }, [selectedAccount]);
 
-  // Autofill: ao completar 14 dígitos de CNPJ, busca dados oficiais e preenche a
-  // razão social — desde que o usuário ainda não a tenha digitado manualmente.
+  // Autofill: ao completar 14 dígitos de CNPJ, busca os dados oficiais. A razão
+  // social é preenchida (se o usuário ainda não digitou a dele) e o restante
+  // (cidade, UF, telefone) é guardado para gravar junto da empresa.
   useEffect(() => {
     const digits = companyCnpj.replace(/\D/g, "");
-    if (!showNewCompany || digits.length !== 14) return;
+    if (!showNewCompany || digits.length !== 14) {
+      setCnpjNotFound(false);
+      return;
+    }
     let cancelled = false;
     setLookingUpCnpj(true);
+    setCnpjNotFound(false);
     lookupCnpj(digits)
       .then((data) => {
-        if (cancelled || !data) return;
+        if (cancelled) return;
+        setCnpjData(data);
+        if (!data) {
+          // A consulta falhou ou o CNPJ não existe: avisa em vez de silenciar.
+          setCnpjNotFound(true);
+          return;
+        }
         if (!companyNameEdited && data.legal_name) {
           setCompanyName(data.legal_name);
         }
@@ -110,6 +127,8 @@ export function NewOpportunityDialog({ open, onClose, accountId }: Props): JSX.E
     setCompanyName("");
     setCompanyCnpj("");
     setCompanyNameEdited(false);
+    setCnpjData(null);
+    setCnpjNotFound(false);
     setShowNewContact(false);
     setContactName("");
     setContactEmail("");
@@ -136,11 +155,16 @@ export function NewOpportunityDialog({ open, onClose, accountId }: Props): JSX.E
       const acc = await createAccount.mutateAsync({
         legal_name: companyName.trim(),
         cnpj: companyCnpj.replace(/\D/g, ""),
+        // Grava o que o autofill trouxe (cidade, UF, telefone) no cadastro da
+        // empresa; o restante é completado em Contatos → Empresas.
+        ...(cnpjData ? { company: companyFieldsFromCnpj(cnpjData) } : {}),
       });
       setSelectedAccount(acc.id);
       setShowNewCompany(false);
       setCompanyName("");
       setCompanyCnpj("");
+      setCnpjData(null);
+      setCompanyNameEdited(false);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Falha ao cadastrar empresa.");
     }
@@ -159,6 +183,13 @@ export function NewOpportunityDialog({ open, onClose, accountId }: Props): JSX.E
     }
     if (!contactEmail.trim()) {
       setError("Informe o e-mail do contato.");
+      return;
+    }
+    // O telefone é obrigatório para pessoa na Base Central. O PhoneField só
+    // entrega valor com o número completo, então vazio aqui significa
+    // "incompleto ou em branco" — melhor dizer isso do que repassar o erro da API.
+    if (!contactPhone) {
+      setError("Informe o telefone do contato com DDD + número (10 ou 11 dígitos).");
       return;
     }
     setSavingContact(true);
@@ -252,11 +283,21 @@ export function NewOpportunityDialog({ open, onClose, accountId }: Props): JSX.E
                   onChange={(e) => setCompanyCnpj(e.target.value)}
                   placeholder="00.000.000/0000-00"
                   required
-                  helperText="Ao completar o CNPJ, buscamos a razão social automaticamente."
+                  helperText={
+                    lookingUpCnpj
+                      ? "Consultando os dados oficiais…"
+                      : "Ao completar o CNPJ, buscamos os dados oficiais automaticamente."
+                  }
                   InputProps={{
                     endAdornment: lookingUpCnpj ? <CircularProgress size={18} /> : undefined,
                   }}
                 />
+                {cnpjNotFound && (
+                  <Alert severity="warning">
+                    Não conseguimos consultar os dados oficiais deste CNPJ (serviço indisponível ou CNPJ inexistente).
+                    Preencha a razão social manualmente.
+                  </Alert>
+                )}
                 <TextField
                   label="Razão social"
                   value={companyName}
@@ -264,6 +305,24 @@ export function NewOpportunityDialog({ open, onClose, accountId }: Props): JSX.E
                   required
                   helperText="Preenchida pelo CNPJ; você pode editar manualmente."
                 />
+                {cnpjData && (
+                  <Alert severity="success" icon={false}>
+                    <Typography variant="caption" component="div">
+                      Dados oficiais encontrados e que serão gravados no cadastro da empresa:
+                    </Typography>
+                    <Typography variant="body2">
+                      {[
+                        cnpjData.trade_name ? `Nome fantasia: ${cnpjData.trade_name}` : null,
+                        [cnpjData.city, cnpjData.state].filter(Boolean).join("/") || null,
+                        cnpjData.phone ? `Tel.: ${cnpjData.phone}` : null,
+                        cnpjData.status ? `Situação: ${cnpjData.status}` : null,
+                      ].filter(Boolean).join(" · ") || "Apenas a razão social."}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" component="div">
+                      Endereço, inscrição estadual e demais campos: complete em Contatos → Empresas.
+                    </Typography>
+                  </Alert>
+                )}
                 <Stack direction="row" spacing={1} justifyContent="flex-end">
                   <Button size="small" onClick={() => { setShowNewCompany(false); setCompanyName(""); setCompanyCnpj(""); setCompanyNameEdited(false); }}>Cancelar</Button>
                   <Button size="small" variant="contained" onClick={submitNewCompany} disabled={createAccount.isPending}>
@@ -317,7 +376,7 @@ export function NewOpportunityDialog({ open, onClose, accountId }: Props): JSX.E
               <Stack spacing={2}>
                 <TextField label="Nome completo" value={contactName} onChange={(e) => setContactName(e.target.value)} required />
                 <TextField label="E-mail" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} required />
-                <PhoneField value={contactPhone} onChange={setContactPhone} />
+                <PhoneField label="Telefone" value={contactPhone} onChange={setContactPhone} required />
                 <Stack direction="row" spacing={1} justifyContent="flex-end">
                   <Button size="small" onClick={() => { setShowNewContact(false); setContactName(""); setContactEmail(""); setContactPhone(""); }}>Cancelar</Button>
                   <Button size="small" variant="contained" onClick={submitNewContact} disabled={savingContact}>

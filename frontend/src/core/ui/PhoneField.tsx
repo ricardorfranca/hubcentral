@@ -7,6 +7,7 @@
  * ser usado em todos os cadastros que envolvem telefone.
  */
 
+import { useState } from "react";
 import { TextField, InputAdornment, Box } from "@mui/material";
 
 /** Bandeira do Brasil (SVG inline, sem dependência externa). */
@@ -75,26 +76,54 @@ interface Props {
   fullWidth?: boolean;
 }
 
+/** Mínimo de dígitos nacionais para formar um número válido (DDD + 8). */
+const MIN_NATIONAL_DIGITS = 10;
+
 /**
  * Campo de telefone padronizado (Brasil, +55 + bandeira).
+ *
+ * O componente mantém os dígitos em edição em estado próprio. Isso é
+ * necessário porque {@link toE164Br} — e, portanto, o `onChange` — só produz um
+ * valor quando o número está completo: se o display dependesse apenas do prop
+ * `value`, os primeiros dígitos digitados voltariam vazios do pai e o campo
+ * nunca aceitaria digitação.
+ *
+ * O estado é ressincronizado quando o `value` muda por fora da digitação (reset
+ * do formulário, carregamento de um cadastro existente), comparando com o
+ * último valor emitido para não confundir "o pai me resetou" com "eu emiti
+ * vazio porque o número ainda está incompleto".
  *
  * @param props - Valor, callback e opções de exibição.
  * @returns O campo de telefone.
  */
 export function PhoneField({ value, onChange, label = "Telefone", required = false, fullWidth = true }: Props): JSX.Element {
-  const digits = toNationalDigits(value);
-  const display = formatBr(digits);
+  const current = value ?? "";
+  const [digits, setDigits] = useState(() => toNationalDigits(current));
+  const [lastEmitted, setLastEmitted] = useState(current);
+
+  if (current !== lastEmitted) {
+    // Mudança vinda de fora (não é eco do que emitimos): adota o novo valor.
+    setLastEmitted(current);
+    setDigits(toNationalDigits(current));
+  }
+
+  const incomplete = digits.length > 0 && digits.length < MIN_NATIONAL_DIGITS;
 
   return (
     <TextField
       label={label}
       required={required}
       fullWidth={fullWidth}
-      value={display}
+      value={formatBr(digits)}
       onChange={(e) => {
         const next = toNationalDigits(e.target.value);
-        onChange(toE164Br(next));
+        setDigits(next);
+        const e164 = toE164Br(next);
+        setLastEmitted(e164);
+        onChange(e164);
       }}
+      error={incomplete}
+      {...(incomplete ? { helperText: "Informe DDD + número (10 ou 11 dígitos)." } : {})}
       placeholder="(11) 99999-9999"
       InputProps={{
         startAdornment: (

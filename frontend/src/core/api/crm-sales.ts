@@ -7,6 +7,7 @@
  */
 
 import { request } from "./client.js";
+import type { CompanyFields } from "./contacts.js";
 
 export type Origin = "inbound" | "outbound" | "indicacao";
 export type Qualification = "frio" | "morno" | "quente";
@@ -91,12 +92,19 @@ export function getAccount(id: string): Promise<AccountView> {
   return request<AccountView>(`/api/crm/accounts/${id}`);
 }
 
-/** Cria uma conta a partir de razão social + CNPJ. */
+/**
+ * Cria uma conta a partir de razão social + CNPJ.
+ *
+ * `company` leva os dados cadastrais oficiais obtidos no autofill de CNPJ
+ * (cidade, UF, telefone…). Eles só são gravados se a empresa ainda não existir
+ * na Base Central — o CRM não sobrescreve cadastro existente.
+ */
 export function createAccount(input: {
   legal_name: string;
   cnpj: string;
   segment?: string | undefined;
   size_tier?: string | undefined;
+  company?: Partial<CompanyFields> | undefined;
 }): Promise<Account> {
   return request<Account>("/api/crm/accounts", { method: "POST", body: input });
 }

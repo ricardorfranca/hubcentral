@@ -2,6 +2,24 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.10.1] - 2026-09-21
+
+### Corrigido
+
+- **Campo de telefone não aceitava digitação** (bug que afetava todos os cadastros: nova pessoa em Contatos, novo contato na oportunidade e os telefones da empresa). O campo só entregava valor ao formulário quando o número estava completo, e como o que era exibido vinha desse valor, cada dígito digitado era descartado na hora — o campo ficava permanentemente vazio e o cadastro falhava com "telefone ausente". O componente passa a manter os dígitos em edição, formatando conforme se digita, e só emite o E.164 quando o número fica completo. Enquanto estiver incompleto, o campo sinaliza "Informe DDD + número (10 ou 11 dígitos)" em vez de falhar no envio.
+- **Cadastro rápido de empresa no CRM descartava os dados oficiais do CNPJ.** A consulta era feita, mas só a razão social era aproveitada e nada além dela chegava ao banco. Agora cidade, UF e telefone encontrados são gravados no cadastro da empresa (em `core.contacts`), tanto no diálogo de nova oportunidade quanto em CRM › Empresas. O cadastro de uma empresa que já existe na Base Central **não** é sobrescrito.
+- **Falha na consulta de CNPJ era silenciosa.** Quando o serviço está indisponível ou o CNPJ não existe, os diálogos agora avisam explicitamente e orientam o preenchimento manual, em vez de simplesmente não preencher nada.
+
+### Alterado
+
+- Os diálogos de empresa do CRM mostram um resumo do que a consulta de CNPJ encontrou (nome fantasia, cidade/UF, telefone, situação cadastral) e indicam que endereço, inscrição estadual e demais campos são completados em Contatos → Empresas.
+- O telefone do novo contato na oportunidade passa a ser marcado como obrigatório, com mensagem própria antes de chamar a API.
+- `POST /api/crm/accounts` aceita um objeto `company` opcional com os dados cadastrais da empresa (aplicados só na criação).
+
+### Operação
+
+- Sem migração de banco nesta versão.
+
 ## [0.10.0] - 2026-09-21
 
 ### Adicionado

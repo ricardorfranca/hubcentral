@@ -17,7 +17,7 @@ import AddIcon from "@mui/icons-material/Add";
 import { useAccounts, useCreateAccount } from "./sales-hooks.js";
 import { useCan } from "../../core/rbac/can.js";
 import { ApiError } from "../../core/api/client.js";
-import { lookupCnpj } from "../../core/api/contacts.js";
+import { lookupCnpj, companyFieldsFromCnpj, type CnpjData } from "../../core/api/contacts.js";
 
 /**
  * Página de listagem de contas.
@@ -86,14 +86,23 @@ function NewAccountDialog({ open, onClose }: { open: boolean; onClose: () => voi
   const [segment, setSegment] = useState("");
   const [sizeTier, setSizeTier] = useState("");
   const [lookup, setLookup] = useState(false);
+  const [cnpjData, setCnpjData] = useState<CnpjData | null>(null);
+  const [cnpjNotFound, setCnpjNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /** Busca os dados oficiais do CNPJ, preenche a razão social e guarda o resto. */
   async function onCnpjBlur(): Promise<void> {
     if (cnpj.replace(/\D/g, "").length !== 14) return;
     setLookup(true);
+    setCnpjNotFound(false);
     const data = await lookupCnpj(cnpj);
     setLookup(false);
-    if (data?.legal_name && !legalName) setLegalName(data.legal_name);
+    setCnpjData(data);
+    if (!data) {
+      setCnpjNotFound(true);
+      return;
+    }
+    if (data.legal_name && !legalName) setLegalName(data.legal_name);
   }
 
   async function submit(): Promise<void> {
@@ -108,11 +117,15 @@ function NewAccountDialog({ open, onClose }: { open: boolean; onClose: () => voi
         cnpj: cnpj.trim(),
         segment: segment.trim() || undefined,
         size_tier: sizeTier.trim() || undefined,
+        // Grava no cadastro da empresa o que o autofill trouxe (cidade, UF, telefone).
+        ...(cnpjData ? { company: companyFieldsFromCnpj(cnpjData) } : {}),
       });
       setLegalName("");
       setCnpj("");
       setSegment("");
       setSizeTier("");
+      setCnpjData(null);
+      setCnpjNotFound(false);
       onClose();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Falha ao criar conta.");
@@ -133,9 +146,28 @@ function NewAccountDialog({ open, onClose }: { open: boolean; onClose: () => voi
             required
             autoFocus
             placeholder="00.000.000/0000-00"
-            helperText={lookup ? "Consultando dados oficiais…" : "Ao sair do campo, buscamos a razão social (editável)."}
+            helperText={lookup ? "Consultando dados oficiais…" : "Ao sair do campo, buscamos os dados oficiais (editáveis)."}
           />
+          {cnpjNotFound && (
+            <Alert severity="warning">
+              Não conseguimos consultar os dados oficiais deste CNPJ. Preencha a razão social manualmente.
+            </Alert>
+          )}
           <TextField label="Razão social" value={legalName} onChange={(e) => setLegalName(e.target.value)} required />
+          {cnpjData && (
+            <Alert severity="success" icon={false}>
+              <Typography variant="body2">
+                {[
+                  cnpjData.trade_name ? `Nome fantasia: ${cnpjData.trade_name}` : null,
+                  [cnpjData.city, cnpjData.state].filter(Boolean).join("/") || null,
+                  cnpjData.phone ? `Tel.: ${cnpjData.phone}` : null,
+                ].filter(Boolean).join(" · ") || "Apenas a razão social foi encontrada."}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" component="div">
+                Cidade, UF e telefone são gravados no cadastro. Endereço e demais campos: Contatos → Empresas.
+              </Typography>
+            </Alert>
+          )}
           <Stack direction="row" spacing={2}>
             <TextField label="Segmento" value={segment} onChange={(e) => setSegment(e.target.value)} fullWidth />
             <TextField label="Porte" value={sizeTier} onChange={(e) => setSizeTier(e.target.value)} fullWidth />

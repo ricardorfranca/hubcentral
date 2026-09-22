@@ -19,7 +19,7 @@ import {
 import DeleteIcon from "@mui/icons-material/Delete";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import {
-  createCompany, updateContact, lookupCnpj, lookupCep, listContacts,
+  createCompany, updateContact, lookupCnpj, lookupCep, listContacts, companyFieldsFromCnpj,
   listCompanyPeople, linkCompanyPerson, setCompanyPersonRole, unlinkCompanyPerson,
   COMPANY_PERSON_ROLES, COMPANY_PERSON_ROLE_LABELS,
   type Contact, type CompanyPersonRole, type ContactPatch,
@@ -170,11 +170,13 @@ export function CompanyFormFields({
     const data = await lookupCnpj(form.fiscal_document);
     setLookingUpCnpj(false);
     if (!data) return;
+    // Reusa a mesma conversão do CRM, para não divergirem.
+    const official = companyFieldsFromCnpj(data);
     const patch: Partial<CompanyForm> = {};
     if (data.legal_name && !form.legal_name) patch.legal_name = data.legal_name;
-    if (data.city && !form.city) patch.city = data.city;
-    if (data.state && !form.state) patch.state = data.state.toUpperCase().slice(0, 2);
-    if (data.phone && !form.phone_primary) patch.phone_primary = `+55${data.phone.replace(/\D/g, "")}`;
+    if (official.city && !form.city) patch.city = official.city;
+    if (official.state && !form.state) patch.state = official.state;
+    if (official.phone_primary && !form.phone_primary) patch.phone_primary = official.phone_primary;
     onChange(patch);
   }
 

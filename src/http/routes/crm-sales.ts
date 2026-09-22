@@ -9,6 +9,7 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { withTransaction } from "../../core/db/pool.js";
 import { createAccount, linkContact, listAccounts, getAccount } from "../../modules/crm/account-service.js";
+import type { CompanyRegistrationFields } from "../../core/contacts/types.js";
 import {
   createOpportunity, listOpportunities, getOpportunity, moveStage, finalize,
   type Origin, type Qualification,
@@ -36,12 +37,32 @@ export function registerCrmSalesRoutes(app: FastifyInstance, pool: Pool): void {
     return reply.send(account);
   });
 
-  app.post<{ Body: { legal_name: string; cnpj: string; segment?: string; size_tier?: string } }>(
+  app.post<{
+    Body: {
+      legal_name: string;
+      cnpj: string;
+      segment?: string;
+      size_tier?: string;
+      /** Dados cadastrais oficiais da empresa (autofill por CNPJ). */
+      company?: CompanyRegistrationFields;
+    };
+  }>(
     "/api/crm/accounts",
     async (request, reply) => {
       const b = request.body;
       const account = await withTransaction(pool, (c) =>
-        createAccount(c, { legalName: b.legal_name, cnpj: b.cnpj, segment: b.segment, sizeTier: b.size_tier, ownerUserId: request.userId ?? undefined }, request.userId),
+        createAccount(
+          c,
+          {
+            legalName: b.legal_name,
+            cnpj: b.cnpj,
+            segment: b.segment,
+            sizeTier: b.size_tier,
+            ownerUserId: request.userId ?? undefined,
+            company: b.company,
+          },
+          request.userId,
+        ),
       );
       return reply.status(201).send(account);
     },

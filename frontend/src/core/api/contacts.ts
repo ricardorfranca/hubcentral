@@ -124,6 +124,24 @@ export interface CnpjData {
   status: string | null;
 }
 
+/**
+ * Converte os dados oficiais de um CNPJ nos campos cadastrais da empresa, para
+ * que os cadastros rápidos (CRM) gravem o que a consulta já trouxe em vez de
+ * descartar. Só inclui o que veio preenchido e válido.
+ *
+ * @param data - Resposta do autofill de CNPJ.
+ * @returns Campos cadastrais prontos para `createCompany`/`createAccount`.
+ */
+export function companyFieldsFromCnpj(data: CnpjData): Partial<CompanyFields> {
+  const fields: Partial<CompanyFields> = {};
+  if (data.city) fields.city = data.city;
+  if (data.state) fields.state = data.state.toUpperCase().slice(0, 2);
+  const digits = (data.phone ?? "").replace(/\D/g, "");
+  // O telefone oficial vem como DDD + número; abaixo de 10 dígitos não forma E.164.
+  if (digits.length >= 10) fields.phone_primary = `+55${digits.slice(0, 11)}`;
+  return fields;
+}
+
 /** Consulta dados oficiais de um CNPJ para pré-preencher o cadastro. */
 export async function lookupCnpj(cnpj: string): Promise<CnpjData | null> {
   const digits = cnpj.replace(/\D/g, "");
