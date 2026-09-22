@@ -36,9 +36,11 @@ import {
 import {
   listCustomFieldDefs, defineCustomField, deleteCustomFieldDef,
   listContactCustomFieldValues, setCustomFieldValue, clearCustomFieldValue,
-  type CustomFieldDataType,
+  listEntityCustomFieldValues, setEntityCustomFieldValue, clearEntityCustomFieldValue,
+  isCustomFieldEntity, DEFAULT_CUSTOM_FIELD_ENTITY,
+  type CustomFieldDataType, type CustomFieldEntity,
 } from "../../core/contacts/custom-field-service.js";
-import { authorize } from "../../core/iam/rbac.js";
+import { authorize, isSuperadmin } from "../../core/iam/rbac.js";
 
 /**
  * Registra as rotas de contatos e segmentos na instância Fastify.
@@ -206,31 +208,81 @@ export function registerContactRoutes(app: FastifyInstance, pool: Pool): void {
 
   // --- Campos personalizados (definições) ---
 
-  // Listar definições de campos personalizados.
-  app.get("/api/custom-fields", async (_request, reply) => {
-    const defs = await withTransaction(pool, (c) => listCustomFieldDefs(c));
+  // Listar definições de campos personalizados de uma entidade (default:
+  // contact). A leitura exige apenas visualizar contatos — as telas de qualquer
+  // módulo precisam listar os campos disponíveis para exibi-los.
+  app.get<{ Querystring: { entity?: string } }>("/api/custom-fields", async (request, reply) => {
+    const entity = resolveEntity(request.query.entity);
+    const defs = await withTransaction(pool, (c) => listCustomFieldDefs(c, entity));
     return reply.send(defs);
   });
 
-  // Criar uma definição de campo personalizado (admin de configurações).
-  app.post<{ Body: { name: string; data_type: CustomFieldDataType } }>(
+  // Criar uma definição de campo personalizado. A GESTÃO das definições é
+  // exclusiva do SuperAdministrador (módulo a módulo, via entidade).
+  app.post<{ Body: { name: string; data_type: CustomFieldDataType; entity?: string } }>(
     "/api/custom-fields",
     async (request, reply) => {
+      const entity = resolveEntity(request.body.entity);
       const def = await withTransaction(pool, async (c) => {
-        await authorize(c, request.userId, "core:config:gerenciar");
-        return defineCustomField(c, request.body.name, request.body.data_type);
+        await requireSuperadminField(c, request.userId);
+        return defineCustomField(c, request.body.name, request.body.data_type, entity);
       });
       return reply.status(201).send(def);
     },
   );
 
   // Remover uma definição de campo personalizado (e seus valores, em cascata).
+  // Exclusivo do SuperAdministrador.
   app.delete<{ Params: { fieldId: string } }>(
     "/api/custom-fields/:fieldId",
     async (request, reply) => {
       await withTransaction(pool, async (c) => {
-        await authorize(c, request.userId, "core:config:gerenciar");
+        await requireSuperadminField(c, request.userId);
         await deleteCustomFieldDef(c, request.params.fieldId);
+      });
+      return reply.status(204).send();
+    },
+  );
+
+  // --- Campos personalizados (valores de entidades genéricas) ---
+  // Ex.: /api/entities/crm_opportunity/<uuid>/custom-fields
+  //      /api/entities/projetos_task/<uuid>/custom-fields
+  // Contatos continuam nas rotas /api/contacts/:id/custom-fields (abaixo).
+
+  // Listar os valores de campos personalizados de um registro de entidade.
+  app.get<{ Params: { entity: string; entityId: string } }>(
+    "/api/entities/:entity/:entityId/custom-fields",
+    async (request, reply) => {
+      const entity = requireGenericEntity(request.params.entity);
+      const values = await withTransaction(pool, async (c) => {
+        await authorize(c, request.userId, "core:contatos:visualizar");
+        return listEntityCustomFieldValues(c, entity, request.params.entityId);
+      });
+      return reply.send(values);
+    },
+  );
+
+  // Definir/atualizar o valor de um campo personalizado de um registro.
+  app.put<{ Params: { entity: string; entityId: string; fieldId: string }; Body: { value: unknown } }>(
+    "/api/entities/:entity/:entityId/custom-fields/:fieldId",
+    async (request, reply) => {
+      const entity = requireGenericEntity(request.params.entity);
+      await withTransaction(pool, async (c) => {
+        await authorize(c, request.userId, "core:contatos:editar");
+        await setEntityCustomFieldValue(c, entity, request.params.entityId, request.params.fieldId, request.body.value);
+      });
+      return reply.status(204).send();
+    },
+  );
+
+  // Remover o valor de um campo personalizado de um registro.
+  app.delete<{ Params: { entity: string; entityId: string; fieldId: string } }>(
+    "/api/entities/:entity/:entityId/custom-fields/:fieldId",
+    async (request, reply) => {
+      const entity = requireGenericEntity(request.params.entity);
+      await withTransaction(pool, async (c) => {
+        await authorize(c, request.userId, "core:contatos:editar");
+        await clearEntityCustomFieldValue(c, entity, request.params.entityId, request.params.fieldId);
       });
       return reply.status(204).send();
     },
@@ -312,4 +364,56 @@ function assertCanonicalRole(role: string | null | undefined): string | undefine
     );
   }
   return role;
+}
+
+/**
+ * Resolve a entidade da querystring/body para definições de campos, aceitando
+ * ausência (default: contato) e rejeitando valores desconhecidos.
+ *
+ * @param entity - Valor informado (querystring/body), ou `undefined`.
+ * @returns A entidade válida.
+ * @throws {DomainError} `CUSTOM_FIELD_NOT_FOUND` se a entidade for desconhecida.
+ */
+function resolveEntity(entity: string | undefined): CustomFieldEntity {
+  if (entity === undefined || entity === "") return DEFAULT_CUSTOM_FIELD_ENTITY;
+  if (!isCustomFieldEntity(entity)) {
+    throw new DomainError(ErrorCode.CUSTOM_FIELD_NOT_FOUND, "Entidade de campo personalizado desconhecida.", { entity });
+  }
+  return entity;
+}
+
+/**
+ * Valida a entidade de uma rota de VALORES genéricos (não-contato). Contatos têm
+ * rotas dedicadas, então `contact` é rejeitado aqui.
+ *
+ * @param entity - Valor do parâmetro de rota.
+ * @returns A entidade genérica válida.
+ * @throws {DomainError} `CUSTOM_FIELD_NOT_FOUND` se desconhecida ou for `contact`.
+ */
+function requireGenericEntity(entity: string): CustomFieldEntity {
+  if (!isCustomFieldEntity(entity) || entity === "contact") {
+    throw new DomainError(ErrorCode.CUSTOM_FIELD_NOT_FOUND, "Entidade de campo personalizado inválida.", { entity });
+  }
+  return entity;
+}
+
+/**
+ * Exige que o autor seja SuperAdministrador para gerir DEFINIÇÕES de campos
+ * personalizados (criar/remover). A gestão dos campos é exclusiva do superadmin;
+ * a atribuição de valores segue o RBAC de cada módulo.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param userId - `user_id` autenticado.
+ * @throws {DomainError} `AUTH_UNAUTHORIZED`/`RBAC_ACCESS_DENIED`.
+ */
+async function requireSuperadminField(
+  client: import("pg").PoolClient,
+  userId: string | null,
+): Promise<void> {
+  if (!userId) {
+    throw new DomainError(ErrorCode.AUTH_UNAUTHORIZED, "Requisição não autenticada.", {});
+  }
+  if (!(await isSuperadmin(client, userId))) {
+    throw new DomainError(ErrorCode.RBAC_ACCESS_DENIED, "Apenas o SuperAdministrador pode gerir campos personalizados.", {});
+  }
 }

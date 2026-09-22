@@ -325,7 +325,7 @@ function CampaignEditor({
  * (como `{{campo_<nome>}}`).
  */
 function VariablePalette({ onInsert }: { onInsert: (token: string) => void }): JSX.Element {
-  const { data: defs } = useQuery({ queryKey: ["custom-fields"], queryFn: listCustomFieldDefs });
+  const { data: defs } = useQuery({ queryKey: ["custom-fields", "contact"], queryFn: () => listCustomFieldDefs("contact") });
 
   return (
     <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>

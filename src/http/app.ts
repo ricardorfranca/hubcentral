@@ -22,38 +22,57 @@ import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerBackupRoutes } from "./routes/backup.js";
 import { registerImportExportRoutes } from "./routes/import-export.js";
 import { registerCommsRoutes } from "./routes/comms.js";
+import { registerApiKeyRoutes, registerExternalApiRoutes } from "./routes/api-keys.js";
 import { validateSession } from "../core/iam/session-service.js";
+import { resolveApiKey } from "../core/iam/api-key-service.js";
 
-/** Extensão do request com o usuário autenticado. */
+/** Extensão do request com o principal autenticado (usuário ou chave de API). */
 declare module "fastify" {
   interface FastifyRequest {
-    /** `user_id` autenticado, ou `null` se não autenticado. */
+    /** `user_id` autenticado (sessão de usuário), ou `null`. */
     userId: string | null;
+    /** `id` da chave de API autenticada (integração externa), ou `null`. */
+    apiKeyId: string | null;
   }
 }
 
+/** Extrai o segredo Bearer (ou X-API-Key) da requisição, ou `null`. */
+function extractToken(request: FastifyRequest): string | null {
+  const authorization = request.headers.authorization;
+  const match = authorization ? /^Bearer\s+(.+)$/i.exec(authorization) : null;
+  if (match) return match[1]!;
+  const apiKeyHeader = request.headers["x-api-key"];
+  if (typeof apiKeyHeader === "string" && apiKeyHeader.trim() !== "") return apiKeyHeader.trim();
+  return null;
+}
+
 /**
- * Resolve o `user_id` autenticado a partir do token Bearer da sessão (IAM).
- * A autenticação é delegada ao IAM: o token é validado em `core.sessions`
- * (não expirado nem revogado). Sem token válido, retorna `null`.
+ * Resolve o principal autenticado a partir do token. Primeiro tenta uma sessão
+ * de usuário (IAM, `core.sessions`); se não for uma sessão válida, tenta uma
+ * chave de API ativa (`core.api_keys`). Retorna qual principal foi resolvido.
  *
  * @param pool - Pool de conexões.
  * @param request - Requisição Fastify.
- * @returns O `user_id` válido, ou `null`.
+ * @returns `{ userId, apiKeyId }`, ambos possivelmente `null`.
  */
-async function resolveUser(pool: Pool, request: FastifyRequest): Promise<string | null> {
-  const authorization = request.headers.authorization;
-  const match = authorization ? /^Bearer\s+(.+)$/i.exec(authorization) : null;
-  const token = match ? match[1]! : null;
-  if (!token) {
-    return null;
-  }
+async function resolvePrincipal(
+  pool: Pool,
+  request: FastifyRequest,
+): Promise<{ userId: string | null; apiKeyId: string | null }> {
+  const token = extractToken(request);
+  if (!token) return { userId: null, apiKeyId: null };
   const client = await pool.connect();
   try {
-    return await validateSession(client, token);
+    try {
+      const userId = await validateSession(client, token);
+      return { userId, apiKeyId: null };
+    } catch {
+      // Não é uma sessão de usuário: tenta como chave de API.
+    }
+    const apiKeyId = await resolveApiKey(client, token);
+    return { userId: null, apiKeyId };
   } catch {
-    // Token inválido/expirado/revogado -> não autenticado (rota decide 401).
-    return null;
+    return { userId: null, apiKeyId: null };
   } finally {
     client.release();
   }
@@ -81,10 +100,13 @@ export function buildApp(pool: Pool): FastifyInstance {
     limits: { fileSize: Number(process.env.UPLOADS_MAX_BYTES ?? 26_214_400) },
   });
 
-  // Resolve o usuário autenticado antes de cada handler.
+  // Resolve o principal autenticado (usuário ou chave de API) antes de cada handler.
   app.decorateRequest("userId", null);
+  app.decorateRequest("apiKeyId", null);
   app.addHook("preHandler", async (request) => {
-    request.userId = await resolveUser(pool, request);
+    const { userId, apiKeyId } = await resolvePrincipal(pool, request);
+    request.userId = userId;
+    request.apiKeyId = apiKeyId;
   });
 
   // Converte erros de domínio em respostas HTTP padronizadas.
@@ -108,6 +130,8 @@ export function buildApp(pool: Pool): FastifyInstance {
   registerImportExportRoutes(app, pool);
   registerCommsRoutes(app, pool);
   registerProjetosRoutes(app, pool);
+  registerApiKeyRoutes(app, pool);
+  registerExternalApiRoutes(app, pool);
 
   return app;
 }

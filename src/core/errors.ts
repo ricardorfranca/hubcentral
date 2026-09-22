@@ -185,6 +185,12 @@ export const ErrorCode = {
   PROJ_DEPENDENCY_INVALID: "PROJ_DEPENDENCY_INVALID",
   /** Projeto não está arquivado (nada a desarquivar). */
   PROJ_NOT_ARCHIVED: "PROJ_NOT_ARCHIVED",
+  /** Nome de chave de API vazio/em branco. */
+  API_KEY_INVALID_NAME: "API_KEY_INVALID_NAME",
+  /** Chave de API não encontrada. */
+  API_KEY_NOT_FOUND: "API_KEY_NOT_FOUND",
+  /** Payload de ingestão externa inválido (campo obrigatório ausente/incorreto). */
+  API_INGEST_INVALID: "API_INGEST_INVALID",
 } as const;
 
 /** União dos valores de {@link ErrorCode}. */

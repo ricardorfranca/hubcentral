@@ -253,15 +253,22 @@ export function unassignLabel(contactId: string, categoryId: string): Promise<vo
 /** Tipo de dado de um campo personalizado. */
 export type CustomFieldDataType = "text" | "number" | "boolean" | "date";
 
+/**
+ * Entidades que suportam campos personalizados. Espelha
+ * `CUSTOM_FIELD_ENTITIES` do backend (src/core/contacts/custom-field-service.ts).
+ */
+export type CustomFieldEntity = "contact" | "crm_opportunity" | "projetos_task";
+
 /** Definição de um campo personalizado. */
 export interface CustomFieldDef {
   id: string;
   name: string;
   data_type: CustomFieldDataType;
+  entity?: CustomFieldEntity;
   created_at: string;
 }
 
-/** Valor de um campo personalizado de um contato (com metadados da definição). */
+/** Valor de um campo personalizado (com metadados da definição). */
 export interface CustomFieldValue {
   field_id: string;
   name: string;
@@ -269,19 +276,44 @@ export interface CustomFieldValue {
   value: unknown;
 }
 
-/** Lista as definições de campos personalizados. */
-export function listCustomFieldDefs(): Promise<CustomFieldDef[]> {
-  return request<CustomFieldDef[]>("/api/custom-fields");
+/** Lista as definições de campos personalizados de uma entidade (default: contact). */
+export function listCustomFieldDefs(entity?: CustomFieldEntity): Promise<CustomFieldDef[]> {
+  const qs = entity ? `?entity=${encodeURIComponent(entity)}` : "";
+  return request<CustomFieldDef[]>(`/api/custom-fields${qs}`);
 }
 
-/** Cria uma definição de campo personalizado (admin). */
-export function createCustomFieldDef(name: string, dataType: CustomFieldDataType): Promise<CustomFieldDef> {
-  return request<CustomFieldDef>("/api/custom-fields", { method: "POST", body: { name, data_type: dataType } });
+/** Cria uma definição de campo personalizado (superadmin) para uma entidade. */
+export function createCustomFieldDef(
+  name: string,
+  dataType: CustomFieldDataType,
+  entity: CustomFieldEntity = "contact",
+): Promise<CustomFieldDef> {
+  return request<CustomFieldDef>("/api/custom-fields", {
+    method: "POST",
+    body: { name, data_type: dataType, entity },
+  });
 }
 
 /** Remove uma definição de campo personalizado (e seus valores). */
 export function deleteCustomFieldDef(fieldId: string): Promise<void> {
   return request<void>(`/api/custom-fields/${fieldId}`, { method: "DELETE" });
+}
+
+// --- Valores de campos personalizados de entidades genéricas (não-contato) ---
+
+/** Lista os valores de campos personalizados de um registro de entidade. */
+export function listEntityCustomFields(entity: CustomFieldEntity, entityId: string): Promise<CustomFieldValue[]> {
+  return request<CustomFieldValue[]>(`/api/entities/${entity}/${entityId}/custom-fields`);
+}
+
+/** Define/atualiza o valor de um campo personalizado de um registro de entidade. */
+export function setEntityCustomField(entity: CustomFieldEntity, entityId: string, fieldId: string, value: unknown): Promise<void> {
+  return request<void>(`/api/entities/${entity}/${entityId}/custom-fields/${fieldId}`, { method: "PUT", body: { value } });
+}
+
+/** Remove o valor de um campo personalizado de um registro de entidade. */
+export function clearEntityCustomField(entity: CustomFieldEntity, entityId: string, fieldId: string): Promise<void> {
+  return request<void>(`/api/entities/${entity}/${entityId}/custom-fields/${fieldId}`, { method: "DELETE" });
 }
 
 /** Lista os valores de campos personalizados de um contato. */

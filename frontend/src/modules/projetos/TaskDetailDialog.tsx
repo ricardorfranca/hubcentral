@@ -11,8 +11,9 @@ import { useState } from "react";
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, Stack, Typography, Divider,
   List, ListItem, ListItemText, IconButton, TextField, MenuItem, CircularProgress, Link,
-  FormControlLabel, Switch, Chip,
+  FormControlLabel, Switch, Chip, Box,
 } from "@mui/material";
+import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
 import {
@@ -21,6 +22,7 @@ import {
 import { useCan } from "../../core/rbac/can.js";
 import { attachmentUrl, type ProjectMember } from "../../core/api/projetos.js";
 import { fmtMinutes } from "./format.js";
+import { CustomFieldsEditor } from "../../core/ui/CustomFieldsEditor.js";
 
 /** Props do diálogo. */
 interface Props {
@@ -77,7 +79,14 @@ export function TaskDetailDialog({ taskId, projectId, members, onClose }: Props)
           <DialogTitle>{task.title}</DialogTitle>
           <DialogContent>
             <Stack spacing={2} sx={{ mt: 1 }}>
-              {task.description && <Typography variant="body2">{task.description}</Typography>}
+              <TaskDescription
+                key={task.id}
+                description={task.description}
+                canEdit={canEdit}
+                onSave={(value) => updateTask.mutate({ description: value })}
+                saving={updateTask.isPending}
+              />
+
 
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                 {task.due_date && <Chip size="small" label={`Prazo: ${new Date(task.due_date).toLocaleDateString("pt-BR")}`} />}
@@ -126,6 +135,9 @@ export function TaskDetailDialog({ taskId, projectId, members, onClose }: Props)
                   />
                 </>
               )}
+
+              <Divider textAlign="left"><Typography variant="caption">Campos personalizados</Typography></Divider>
+              <CustomFieldsEditor entity="projetos_task" entityId={task.id} />
 
               <Divider textAlign="left"><Typography variant="caption">Anexos</Typography></Divider>
               <List dense>
@@ -193,5 +205,66 @@ export function TaskDetailDialog({ taskId, projectId, members, onClose }: Props)
         </>
       )}
     </Dialog>
+  );
+}
+
+/**
+ * Bloco de descrição da tarefa: exibe o texto e, para quem pode editar, permite
+ * alternar para um campo multilinha e salvar. Mostra um placeholder quando
+ * vazia (para quem edita) ou nada (para quem só visualiza).
+ *
+ * @param props - Descrição atual, permissão de edição, callback de salvar e flag de salvamento.
+ * @returns O bloco de descrição.
+ */
+function TaskDescription({
+  description, canEdit, onSave, saving,
+}: {
+  description: string | null;
+  canEdit: boolean;
+  onSave: (value: string) => void;
+  saving: boolean;
+}): JSX.Element | null {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(description ?? "");
+
+  if (editing) {
+    return (
+      <Box>
+        <Typography variant="caption" color="text.secondary">Descrição</Typography>
+        <TextField
+          fullWidth multiline minRows={3} size="small" autoFocus
+          value={text} onChange={(e) => setText(e.target.value)}
+          placeholder="Descreva a tarefa…" sx={{ mt: 0.5 }}
+        />
+        <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+          <Button size="small" variant="contained" disabled={saving} onClick={() => { onSave(text.trim()); setEditing(false); }}>
+            Salvar descrição
+          </Button>
+          <Button size="small" onClick={() => { setText(description ?? ""); setEditing(false); }}>Cancelar</Button>
+        </Stack>
+      </Box>
+    );
+  }
+
+  // Sem descrição e sem permissão de edição: não ocupa espaço.
+  if (!description && !canEdit) return null;
+
+  return (
+    <Box>
+      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1}>
+        {description ? (
+          <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", flexGrow: 1 }}>{description}</Typography>
+        ) : (
+          <Typography variant="body2" color="text.secondary" fontStyle="italic" sx={{ flexGrow: 1 }}>
+            Sem descrição.
+          </Typography>
+        )}
+        {canEdit && (
+          <IconButton size="small" aria-label="editar descrição" onClick={() => { setText(description ?? ""); setEditing(true); }}>
+            <EditIcon fontSize="small" />
+          </IconButton>
+        )}
+      </Stack>
+    </Box>
   );
 }

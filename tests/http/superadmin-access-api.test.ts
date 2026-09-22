@@ -24,9 +24,11 @@ import { ALL_NAMESPACES } from "../../src/core/iam/namespaces.js";
  * commitados no pool de teste com e-mails únicos por caso (sem rollback, pois a
  * rota abre suas próprias transações).
  *
- * Rota protegida escolhida: `POST /api/custom-fields`, guardada por
- * `core:config:gerenciar` (ver `src/http/routes/contacts.ts`). O corpo é válido
- * para que a única barreira observável seja a autorização RBAC.
+ * Rota protegida escolhida: `PATCH /api/settings/core.branding.system_name`,
+ * guardada por `core:config:gerenciar` (ver `src/http/routes/settings.ts`). O
+ * corpo é válido para que a única barreira observável seja a autorização RBAC.
+ * (A criação de campos personalizados deixou de servir como rota-exemplo por
+ * passar a exigir SuperAdministrador, e não apenas o namespace de configuração.)
  */
 
 let app: FastifyInstance;
@@ -58,18 +60,18 @@ async function login(email: string, password: string): Promise<string> {
   return res.json().token as string;
 }
 
-/** Requisição à rota protegida (POST /api/custom-fields) com corpo válido. */
+/**
+ * Requisição à rota protegida (PATCH /api/settings/:key) com corpo válido,
+ * guardada apenas por `core:config:gerenciar`. Retorna 200 quando autorizada.
+ */
 async function callProtected(
   token: string,
 ): Promise<Awaited<ReturnType<FastifyInstance["inject"]>>> {
   return app.inject({
-    method: "POST",
-    url: "/api/custom-fields",
+    method: "PATCH",
+    url: "/api/settings/core.branding.system_name",
     headers: auth(token),
-    payload: {
-      name: `campo_${Math.random().toString(36).slice(2)}`,
-      data_type: "text",
-    },
+    payload: { value: null },
   });
 }
 
@@ -155,7 +157,7 @@ describe("SuperAdmin full access — integração de rota", () => {
 
     // O bypass de superadmin autoriza: não pode ser 403 (RBAC_ACCESS_DENIED).
     expect(res.statusCode).not.toBe(403);
-    expect(res.statusCode).toBe(201);
+    expect(res.statusCode).toBe(200);
   });
 
   // Req 3.1, 3.2: ao rebaixar o SuperAdministrador para papel comum, a
@@ -169,7 +171,7 @@ describe("SuperAdmin full access — integração de rota", () => {
     // Enquanto superadmin: autorizado mesmo sem o namespace.
     const tokenAsSuper = await login(email, password);
     const authorized = await callProtected(tokenAsSuper);
-    expect(authorized.statusCode).toBe(201);
+    expect(authorized.statusCode).toBe(200);
 
     // Rebaixa para papel comum (não-superadmin: 'operator', conforme o CHECK de role).
     await getTestPool().query(
@@ -195,7 +197,7 @@ describe("SuperAdmin full access — integração de rota", () => {
     await makeCommonUser(emailWith, password, true);
     const tokenWith = await login(emailWith, password);
     const okRes = await callProtected(tokenWith);
-    expect(okRes.statusCode).toBe(201);
+    expect(okRes.statusCode).toBe(200);
 
     // SEM o namespace: negado com RBAC_ACCESS_DENIED.
     const emailWithout = `com-no-${Math.random().toString(36).slice(2)}@x.com`;

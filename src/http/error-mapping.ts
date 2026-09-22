@@ -48,6 +48,7 @@ const STATUS_BY_CODE: Record<string, number> = {
   [ErrorCode.CONTACT_MANAGER_NOT_FOUND]: 404,
   [ErrorCode.MODULE_ALREADY_REGISTERED]: 409,
   [ErrorCode.CONTACT_HAS_REFERENCES]: 409,
+  [ErrorCode.API_KEY_NOT_FOUND]: 404,
   // Demais erros de validação -> 400 (default abaixo).
 };
 

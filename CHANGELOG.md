@@ -2,6 +2,26 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.11.0] - 2026-09-22
+
+### Adicionado
+
+- **Campos personalizados por módulo.** Os campos personalizados, antes exclusivos de contatos, passam a existir para outras entidades — inicialmente **Oportunidades do CRM** e **Tarefas de Projetos**. A gestão das definições é **exclusiva do SuperAdministrador**, feita módulo a módulo em Administração → Campos personalizados (seletor de entidade). Os valores são preenchidos e exibidos diretamente nas telas de cada módulo (detalhe da oportunidade e detalhe da tarefa), além do já existente em Contatos.
+- **APIs externas (chaves de API).** Nova área em Administração → APIs externas (SuperAdministrador) para criar chaves de API que funcionam como "usuários de sistema": autenticam por `Authorization: Bearer <segredo>` ou `X-API-Key` e só executam operações cujos namespaces RBAC lhes foram concedidos (sem bypass de SuperAdministrador). O segredo é exibido uma única vez, na criação; é possível conceder permissões por chave e revogar.
+- **Documentação da API no próprio sistema.** Nova tela Administração → Documentação da API, acessível pelo mesmo login, com autenticação, formato de erros, sintaxe dos endpoints e exemplos prontos (curl e fetch) para desenvolvedores.
+- **Ingestão de leads via API.** `POST /api/external/crm/leads` recebe leads de uma landing page (ou outro sistema), faz find-or-create dos contatos no CRM e grava dados de rastreamento (ex.: `utm_source`, `utm_campaign`, `landing_url`) como campos personalizados do contato, mapeados por nome.
+- **Descrição editável nas tarefas de Projetos.** No detalhe da tarefa, a descrição passa a ser editável (para quem tem `projetos:tarefa:editar`), com edição inline.
+
+### Alterado
+
+- **Editor de permissões de usuário.** Cada categoria (módulo) ganhou os atalhos "Marcar todas" e "Desmarcar todas", com contador de selecionadas por categoria, agilizando a atribuição.
+- **Namespaces RBAC.** Novos namespaces de API externa (`api:crm:ingest_lead`, `api:contatos:criar`) para conceder a chaves de API.
+- A criação/remoção de definições de campos personalizados passou a exigir SuperAdministrador (antes bastava `core:config:gerenciar`).
+
+### Operação
+
+- **Novas migrações de banco: execute `npm run migrate:up`.** Adicionam o escopo por entidade aos campos personalizados (coluna `entity` em `core.custom_field_defs`, com backfill para `contact`, e a tabela `core.entity_custom_field_values`) e criam as tabelas de chaves de API (`core.api_keys` e `core.api_key_permissions`). Todas preservam os dados existentes.
+
 ## [0.10.1] - 2026-09-21
 
 ### Corrigido

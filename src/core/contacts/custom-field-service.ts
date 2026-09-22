@@ -20,11 +20,34 @@ export const CUSTOM_FIELD_DATA_TYPES: readonly CustomFieldDataType[] = [
   "date",
 ];
 
+/**
+ * Entidades que suportam campos personalizados. Cada módulo declara aqui as
+ * entidades cujos registros podem ser enriquecidos com campos personalizados.
+ * O SuperAdministrador escolhe a entidade (módulo a módulo) ao definir campos.
+ */
+export const CUSTOM_FIELD_ENTITIES = [
+  "contact",
+  "crm_opportunity",
+  "projetos_task",
+] as const;
+
+/** Entidade dona de um campo personalizado. */
+export type CustomFieldEntity = (typeof CUSTOM_FIELD_ENTITIES)[number];
+
+/** Entidade padrão (compatibilidade com o comportamento original: contatos). */
+export const DEFAULT_CUSTOM_FIELD_ENTITY: CustomFieldEntity = "contact";
+
+/** Indica se um valor é uma entidade de campo personalizado conhecida. */
+export function isCustomFieldEntity(value: unknown): value is CustomFieldEntity {
+  return typeof value === "string" && (CUSTOM_FIELD_ENTITIES as readonly string[]).includes(value);
+}
+
 /** Definição de campo personalizado como persistida. */
 export interface CustomFieldDef {
   id: string;
   name: string;
   data_type: CustomFieldDataType;
+  entity: CustomFieldEntity;
   created_at: Date;
 }
 
@@ -69,14 +92,21 @@ export function isValueOfType(dataType: CustomFieldDataType, value: unknown): bo
 }
 
 /**
- * Lista todas as definições de campos personalizados, ordenadas por nome.
+ * Lista definições de campos personalizados de uma entidade, ordenadas por
+ * nome. Por padrão, lista os campos de contato (compatibilidade).
  *
  * @param client - Cliente PostgreSQL.
- * @returns As definições cadastradas.
+ * @param entity - Entidade dona dos campos (default: `contact`).
+ * @returns As definições cadastradas da entidade.
  */
-export async function listCustomFieldDefs(client: PoolClient): Promise<CustomFieldDef[]> {
+export async function listCustomFieldDefs(
+  client: PoolClient,
+  entity: CustomFieldEntity = DEFAULT_CUSTOM_FIELD_ENTITY,
+): Promise<CustomFieldDef[]> {
   const { rows } = await client.query<CustomFieldDef>(
-    `SELECT id, name, data_type, created_at FROM core.custom_field_defs ORDER BY name`,
+    `SELECT id, name, data_type, entity, created_at
+     FROM core.custom_field_defs WHERE entity = $1 ORDER BY name`,
+    [entity],
   );
   return rows;
 }
@@ -154,6 +184,7 @@ export async function defineCustomField(
   client: PoolClient,
   name: string,
   dataType: CustomFieldDataType,
+  entity: CustomFieldEntity = DEFAULT_CUSTOM_FIELD_ENTITY,
 ): Promise<CustomFieldDef> {
   const trimmed = name.trim();
   if (trimmed === "" || trimmed.length > FIELD_NAME_MAX_LENGTH) {
@@ -164,23 +195,24 @@ export async function defineCustomField(
     );
   }
 
+  // Unicidade do nome é por entidade (dois módulos podem ter "origem").
   const existing = await client.query<{ id: string }>(
-    `SELECT id FROM core.custom_field_defs WHERE name = $1 LIMIT 1`,
-    [trimmed],
+    `SELECT id FROM core.custom_field_defs WHERE entity = $1 AND name = $2 LIMIT 1`,
+    [entity, trimmed],
   );
   if (existing.rows[0]) {
     throw new DomainError(
       ErrorCode.CUSTOM_FIELD_DUPLICATE_NAME,
-      "Já existe um campo personalizado com este nome.",
+      "Já existe um campo personalizado com este nome nesta entidade.",
       { existing_field_id: existing.rows[0].id },
     );
   }
 
   const { rows } = await client.query<CustomFieldDef>(
-    `INSERT INTO core.custom_field_defs (name, data_type)
-     VALUES ($1, $2)
-     RETURNING id, name, data_type, created_at`,
-    [trimmed, dataType],
+    `INSERT INTO core.custom_field_defs (name, data_type, entity)
+     VALUES ($1, $2, $3)
+     RETURNING id, name, data_type, entity, created_at`,
+    [trimmed, dataType, entity],
   );
   return rows[0] as CustomFieldDef;
 }
@@ -252,4 +284,110 @@ export async function findContactsByCustomField(
     [fieldId, JSON.stringify(value)],
   );
   return rows.map((r) => r.contact_id);
+}
+
+// ---------------------------------------------------------------------------
+// Valores de campos personalizados de entidades genéricas (não-contato).
+//
+// Contatos usam contact_custom_field_values (FK forte + cascata). As demais
+// entidades (oportunidades do CRM, tarefas de Projetos, ...) usam a tabela
+// genérica core.entity_custom_field_values, chaveada por (entity, entity_id).
+// ---------------------------------------------------------------------------
+
+/**
+ * Lista os valores de campos personalizados de um registro de uma entidade
+ * genérica, com o nome e o tipo da definição. Inclui as definições sem valor
+ * atribuído (value = null) para a UI renderizar todos os campos disponíveis.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param entity - Entidade dona dos campos.
+ * @param entityId - `id` do registro.
+ * @returns Um item por definição da entidade, com o valor (ou null).
+ */
+export async function listEntityCustomFieldValues(
+  client: PoolClient,
+  entity: CustomFieldEntity,
+  entityId: string,
+): Promise<CustomFieldValue[]> {
+  const { rows } = await client.query<CustomFieldValue>(
+    `SELECT d.id AS field_id, d.name, d.data_type, v.value
+     FROM core.custom_field_defs d
+     LEFT JOIN core.entity_custom_field_values v
+       ON v.field_id = d.id AND v.entity = $1 AND v.entity_id = $2
+     WHERE d.entity = $1
+     ORDER BY d.name`,
+    [entity, entityId],
+  );
+  return rows;
+}
+
+/**
+ * Atribui/atualiza o valor de um campo personalizado de um registro de entidade
+ * genérica, validando contra o tipo da definição e garantindo que o campo
+ * pertence à entidade informada.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param entity - Entidade dona do campo.
+ * @param entityId - `id` do registro.
+ * @param fieldId - `id` da definição do campo.
+ * @param value - Valor a atribuir (deve conformar ao tipo).
+ * @throws {DomainError} `CUSTOM_FIELD_NOT_FOUND` se o campo não existe/não é da entidade.
+ * @throws {DomainError} `CUSTOM_FIELD_TYPE_MISMATCH` se o valor não conforma ao tipo.
+ */
+export async function setEntityCustomFieldValue(
+  client: PoolClient,
+  entity: CustomFieldEntity,
+  entityId: string,
+  fieldId: string,
+  value: unknown,
+): Promise<void> {
+  const def = await client.query<{ data_type: CustomFieldDataType }>(
+    `SELECT data_type FROM core.custom_field_defs WHERE id = $1 AND entity = $2`,
+    [fieldId, entity],
+  );
+  const dataType = def.rows[0]?.data_type;
+  if (!dataType) {
+    throw new DomainError(
+      ErrorCode.CUSTOM_FIELD_NOT_FOUND,
+      "Campo personalizado não encontrado para esta entidade.",
+      { field_id: fieldId, entity },
+    );
+  }
+
+  if (!isValueOfType(dataType, value)) {
+    throw new DomainError(
+      ErrorCode.CUSTOM_FIELD_TYPE_MISMATCH,
+      `O valor não corresponde ao tipo '${dataType}' do campo.`,
+      { expected_type: dataType },
+    );
+  }
+
+  await client.query(
+    `INSERT INTO core.entity_custom_field_values (entity, entity_id, field_id, value)
+     VALUES ($1, $2, $3, $4::jsonb)
+     ON CONFLICT (entity, entity_id, field_id)
+     DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [entity, entityId, fieldId, JSON.stringify(value)],
+  );
+}
+
+/**
+ * Remove o valor de um campo personalizado de um registro de entidade genérica.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param entity - Entidade dona do campo.
+ * @param entityId - `id` do registro.
+ * @param fieldId - `id` da definição do campo.
+ */
+export async function clearEntityCustomFieldValue(
+  client: PoolClient,
+  entity: CustomFieldEntity,
+  entityId: string,
+  fieldId: string,
+): Promise<void> {
+  await client.query(
+    `DELETE FROM core.entity_custom_field_values
+     WHERE entity = $1 AND entity_id = $2 AND field_id = $3`,
+    [entity, entityId, fieldId],
+  );
 }

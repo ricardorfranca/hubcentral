@@ -89,9 +89,20 @@ export const PROJETOS_NAMESPACES: readonly string[] = [
   "projetos:notificacoes:visualizar",
 ];
 
-/** Todos os namespaces conhecidos (núcleo + módulos). */
+/**
+ * Namespaces da API externa. São as capacidades que podem ser concedidas a uma
+ * CHAVE de API (integrações), não a usuários da interface. Ficam catalogados
+ * aqui para aparecerem no editor de permissões de chaves de API.
+ */
+export const API_NAMESPACES: readonly string[] = [
+  "api:crm:ingest_lead",
+  "api:contatos:criar",
+];
+
+/** Todos os namespaces conhecidos (núcleo + módulos + API externa). */
 export const ALL_NAMESPACES: readonly string[] = [
   ...CORE_NAMESPACES,
   ...CRM_NAMESPACES,
   ...PROJETOS_NAMESPACES,
+  ...API_NAMESPACES,
 ];

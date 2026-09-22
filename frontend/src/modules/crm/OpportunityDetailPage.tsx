@@ -22,6 +22,7 @@ import { useCan } from "../../core/rbac/can.js";
 import { brl, dateTime, ACTIVITY_LABELS, ORIGIN_LABELS, QUALIFICATION_LABELS } from "./format.js";
 import type { Activity } from "../../core/api/crm-sales.js";
 import { ApiError } from "../../core/api/client.js";
+import { CustomFieldsEditor } from "../../core/ui/CustomFieldsEditor.js";
 
 /**
  * Página de detalhe de uma oportunidade.
@@ -148,6 +149,11 @@ export function OpportunityDetailPage(): JSX.Element {
                 Finalizar oportunidade
               </Button>
             )}
+          </Paper>
+
+          <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
+            <Typography variant="h6" gutterBottom>Campos personalizados</Typography>
+            <CustomFieldsEditor entity="crm_opportunity" entityId={opp.id} />
           </Paper>
         </Grid>
       </Grid>
