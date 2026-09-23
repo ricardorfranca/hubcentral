@@ -12,6 +12,7 @@ import { buildApp } from "./http/app.js";
 import { startOutboxWorker } from "./core/events/outbox-worker.js";
 import { startCampaignWorker } from "./modules/crm/campaign-worker.js";
 import { registerProjetosNotifier } from "./modules/projetos/notifier.js";
+import { startDeadlineWorker } from "./core/notifications/deadline-worker.js";
 
 /**
  * Inicializa e executa o servidor HUB Central.
@@ -26,6 +27,12 @@ async function main(): Promise<void> {
   const worker = startOutboxWorker(pool, { intervalMs: 1000 });
   // Worker de disparo automático de campanhas (agendamento + throttling).
   const campaignWorker = startCampaignWorker(pool, { intervalMs: 15000 });
+  // Worker de prazos: gera alertas de vencimento (próximo/vencido) no sino.
+  // Intervalo configurável via DEADLINE_SCAN_INTERVAL_MS (default 5 min).
+  const deadlineWorker = startDeadlineWorker(pool, {
+    intervalMs: Number(process.env.DEADLINE_SCAN_INTERVAL_MS ?? 5 * 60_000),
+    onError: (err) => console.error("Falha na varredura de prazos:", err),
+  });
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen({ port, host: "0.0.0.0" });
@@ -33,6 +40,7 @@ async function main(): Promise<void> {
   const shutdown = async (): Promise<void> => {
     worker.stop();
     campaignWorker.stop();
+    deadlineWorker.stop();
     await app.close();
     await pool.end();
     process.exit(0);

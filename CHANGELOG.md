@@ -2,6 +2,19 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.12.0] - 2026-09-22
+
+### Adicionado
+
+- **Alertas de prazo no sino (Central de Notificações).** A tela inicial deixa de ficar sem avisos: sempre que houver um prazo próximo do vencimento ou já vencido em qualquer módulo, o responsável recebe um alerta no sino, com a opção de marcá-lo como lido (individualmente ou "marcar todas"). Clicar no alerta abre a tela do item.
+  - **Projetos:** tarefas não finalizadas (com responsável) e projetos ativos, respeitando o prazo de alerta (`warn_days`) de cada tarefa/projeto.
+  - **CRM:** atividades pendentes (data de conclusão), oportunidades abertas (fechamento previsto) e SLA de leads ativos.
+  - Cada alerta tem duas faixas — **a vencer** e **vencido** — e é gerado sem duplicar: o mesmo aviso não reaparece a cada ciclo, e quando um item passa de "a vencer" para "vencido" um novo alerta (mais grave) é emitido.
+
+### Operação
+
+- **Novas variáveis de ambiente (opcionais).** `DEADLINE_SCAN_INTERVAL_MS` define de quanto em quanto tempo os prazos são varridos (default 5 min) e `DEADLINE_CRM_WARN_DAYS` define a janela em dias de "a vencer" para os itens de CRM (default 2). Sem configurar nada, os defaults valem. Não há migração de banco nesta versão.
+
 ## [0.11.0] - 2026-09-22
 
 ### Adicionado
