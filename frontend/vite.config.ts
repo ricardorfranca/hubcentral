@@ -1,14 +1,11 @@
 /// <reference types="vitest/config" />
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-
 // Versão do produto, lida do package.json raiz do monorepo para exibição na UI.
-const rootPkg = JSON.parse(
-  readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"),
-) as { version?: string };
-const APP_VERSION = rootPkg.version ?? "0.0.0";
+// Import JSON (resolveJsonModule) evita depender dos tipos do Node no frontend.
+import rootPkg from "../package.json" with { type: "json" };
+
+const APP_VERSION = (rootPkg as { version?: string }).version ?? "0.0.0";
 
 /**
  * Configuração do Vite para o frontend do HUB Central.
