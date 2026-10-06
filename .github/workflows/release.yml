@@ -31,10 +31,21 @@ jobs:
       - name: Empacotar dist
         run: tar -czf frontend-dist.tar.gz -C frontend dist
 
+      - name: Criar release (se ainda não existir)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Garante que a release da tag exista. Se já existir, não faz nada;
+          # caso contrário, cria com notas automáticas a partir dos commits.
+          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "${GITHUB_REF_NAME}" \
+              --generate-notes
+          fi
+
       - name: Anexar artefato à release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # A release da tag já existe (criada via gh release create). Anexa o
-          # artefato; --clobber substitui se já houver.
+          # Anexa o artefato compilado; --clobber substitui se já houver.
           gh release upload "${GITHUB_REF_NAME}" frontend-dist.tar.gz --clobber
