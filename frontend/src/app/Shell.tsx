@@ -14,12 +14,11 @@ import {
   Toolbar, Typography, Menu, MenuItem, Divider,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
+import MenuOpenIcon from "@mui/icons-material/MenuOpen";
 import AccountCircle from "@mui/icons-material/AccountCircle";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import { ListSubheader, Box as MuiBox, Tooltip } from "@mui/material";
+import { ListSubheader, Box as MuiBox, Tooltip, Stack } from "@mui/material";
 import { MODULE_REGISTRY } from "../core/modules/registry.js";
 import { useCan } from "../core/rbac/can.js";
 import { useBrandingStore } from "../core/branding/branding-store.js";
@@ -30,6 +29,8 @@ import { NotificationBell } from "../core/notifications/NotificationBell.js";
 const DRAWER_WIDTH = 248;
 const COLLAPSED_WIDTH = 64;
 const SIDEBAR_KEY = "hubcentral.sidebar.collapsed";
+// Versão instalada, injetada em build pelo Vite (ver vite.config.ts).
+const APP_VERSION = __APP_VERSION__;
 
 /**
  * Renderiza a casca com a navegação por módulos e a área de conteúdo.
@@ -101,66 +102,80 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
 
   // Renderiza o conteúdo do drawer. O mobile sempre recebe `isCollapsed=false`
   // (modo expandido). O drawer permanente passa o estado real de recolhimento.
+  // Layout em coluna: a navegação ocupa o topo e o rodapé (versão + crédito)
+  // fica fixado ao final da coluna da esquerda.
   const renderDrawer = (isCollapsed: boolean): JSX.Element => (
-    <Box role="navigation">
-      <Toolbar sx={{ justifyContent: isCollapsed ? "center" : "space-between" }}>
-        {!isCollapsed && (
-          <Typography variant="h6" noWrap fontWeight={700}>
-            {systemName}
-          </Typography>
-        )}
-        <Tooltip title={isCollapsed ? "expandir menu" : "recolher menu"} placement="right">
-          <IconButton
-            onClick={toggleCollapsed}
-            aria-label={isCollapsed ? "expandir menu" : "recolher menu"}
-            sx={{ display: { xs: "none", sm: "inline-flex" } }}
-          >
-            {isCollapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
-          </IconButton>
-        </Tooltip>
-      </Toolbar>
+    <Box
+      role="navigation"
+      sx={{ display: "flex", flexDirection: "column", height: "100%" }}
+    >
+      {/* Alinha o início da navegação abaixo do AppBar fixo. */}
+      <Toolbar />
       <Divider />
-      {menuGroups.map((group, gi) => (
-        <List
-          key={group.title}
-          subheader={
-            isCollapsed ? undefined : (
-              <ListSubheader component="div" disableSticky>{group.title}</ListSubheader>
-            )
-          }
-          sx={{ borderTop: gi > 0 ? 1 : 0, borderColor: "divider" }}
-        >
-          {group.items.map((entry) => {
-            const Icon = entry.icon;
-            const selected = location.pathname.startsWith(entry.path);
-            const button = (
-              <ListItemButton
-                key={entry.path}
-                selected={selected}
-                onClick={() => {
-                  navigate(entry.path);
-                  setMobileOpen(false);
-                }}
-                sx={isCollapsed ? { justifyContent: "center", px: 2.5 } : {}}
-              >
-                <ListItemIcon
-                  sx={isCollapsed ? { minWidth: 0, mr: "auto", justifyContent: "center" } : {}}
+      <Box sx={{ flexGrow: 1, overflowY: "auto" }}>
+        {menuGroups.map((group, gi) => (
+          <List
+            key={group.title}
+            subheader={
+              isCollapsed ? undefined : (
+                <ListSubheader component="div" disableSticky>{group.title}</ListSubheader>
+              )
+            }
+            sx={{ borderTop: gi > 0 ? 1 : 0, borderColor: "divider" }}
+          >
+            {group.items.map((entry) => {
+              const Icon = entry.icon;
+              const selected = location.pathname.startsWith(entry.path);
+              const button = (
+                <ListItemButton
+                  key={entry.path}
+                  selected={selected}
+                  onClick={() => {
+                    navigate(entry.path);
+                    setMobileOpen(false);
+                  }}
+                  sx={isCollapsed ? { justifyContent: "center", px: 2.5 } : {}}
                 >
-                  <Icon />
-                </ListItemIcon>
-                {!isCollapsed && <ListItemText primary={entry.label} />}
-              </ListItemButton>
-            );
-            return isCollapsed ? (
-              <Tooltip key={entry.path} title={entry.label} placement="right">
-                {button}
-              </Tooltip>
-            ) : (
-              button
-            );
-          })}
-        </List>
-      ))}
+                  <ListItemIcon
+                    sx={isCollapsed ? { minWidth: 0, mr: "auto", justifyContent: "center" } : {}}
+                  >
+                    <Icon />
+                  </ListItemIcon>
+                  {!isCollapsed && <ListItemText primary={entry.label} />}
+                </ListItemButton>
+              );
+              return isCollapsed ? (
+                <Tooltip key={entry.path} title={entry.label} placement="right">
+                  {button}
+                </Tooltip>
+              ) : (
+                button
+              );
+            })}
+          </List>
+        ))}
+      </Box>
+
+      {/* Rodapé da coluna esquerda: versão instalada e crédito discreto. */}
+      <Divider />
+      <Box sx={{ p: isCollapsed ? 1 : 1.5, textAlign: "center" }}>
+        {isCollapsed ? (
+          <Tooltip title={`Versão ${APP_VERSION} — Grupo RFTecnologia`} placement="right">
+            <Typography variant="caption" color="text.secondary" noWrap>
+              v{APP_VERSION}
+            </Typography>
+          </Tooltip>
+        ) : (
+          <Stack spacing={0.25}>
+            <Typography variant="caption" color="text.secondary" noWrap>
+              Versão {APP_VERSION}
+            </Typography>
+            <Typography variant="caption" color="text.disabled" noWrap>
+              Grupo RFTecnologia
+            </Typography>
+          </Stack>
+        )}
+      </Box>
     </Box>
   );
 
@@ -168,6 +183,7 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
     <Box sx={{ display: "flex", minHeight: "100vh" }}>
       <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
         <Toolbar>
+          {/* Mobile: abre/fecha o drawer temporário. */}
           <IconButton
             color="inherit"
             edge="start"
@@ -177,6 +193,18 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
           >
             <MenuIcon />
           </IconButton>
+          {/* Desktop: recolhe/expande o menu lateral permanente. */}
+          <Tooltip title={collapsed ? "Expandir menu" : "Recolher menu"}>
+            <IconButton
+              color="inherit"
+              edge="start"
+              onClick={toggleCollapsed}
+              sx={{ mr: 2, display: { xs: "none", sm: "inline-flex" } }}
+              aria-label={collapsed ? "expandir menu" : "recolher menu"}
+            >
+              {collapsed ? <MenuIcon /> : <MenuOpenIcon />}
+            </IconButton>
+          </Tooltip>
           <MuiBox sx={{ display: "flex", alignItems: "center", gap: 1, flexGrow: 1 }}>
             {logoUrl && (
               <MuiBox

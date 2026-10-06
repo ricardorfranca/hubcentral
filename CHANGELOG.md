@@ -2,6 +2,16 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.13.1] - 2026-10-05
+
+### Corrigido
+
+- **Botão de recolher o menu lateral agora aparece.** O controle para recolher/expandir a barra de navegação ficava escondido atrás do cabeçalho fixo e não era visível. Ele foi movido para o próprio cabeçalho (canto superior esquerdo), ao lado do menu, e fica sempre acessível no desktop.
+
+### Alterado
+
+- **Versão e crédito no rodapé do menu lateral.** O final da coluna da esquerda passa a exibir a versão instalada do sistema e, de forma discreta, a menção ao Grupo RFTecnologia. Quando o menu está recolhido, a versão aparece compacta (ex.: "v0.13.1") com a informação completa na dica ao passar o mouse.
+
 ## [0.13.0] - 2026-10-05
 
 ### Alterado
