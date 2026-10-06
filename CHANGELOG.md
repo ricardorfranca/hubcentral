@@ -2,6 +2,13 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.13.0] - 2026-10-05
+
+### Alterado
+
+- **Menu lateral recolhível.** A barra de navegação à esquerda passa a ter um botão para recolher e expandir. Recolhida, mostra apenas os ícones (com dica ao passar o mouse) e libera mais espaço para a área de trabalho; expandida, volta a exibir ícone e texto por grupo. A preferência fica salva no navegador e é mantida entre sessões. No celular, o comportamento continua o mesmo (menu abre por cima).
+- **Modo foco no detalhe do projeto.** O detalhe do projeto ganhou um botão "Modo foco" que oculta a coluna de informações (resumo, membros, recursos, comentários) e expande o quadro Kanban/Gantt para a largura inteira da tela, facilitando a visualização. Desligado, mantém o layout lado a lado atual. A escolha é lembrada por projeto.
+
 ## [0.12.0] - 2026-09-22
 
 ### Adicionado
