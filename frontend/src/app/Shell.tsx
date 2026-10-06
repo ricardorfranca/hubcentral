@@ -17,6 +17,8 @@ import MenuIcon from "@mui/icons-material/Menu";
 import AccountCircle from "@mui/icons-material/AccountCircle";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { ListSubheader, Box as MuiBox, Tooltip } from "@mui/material";
 import { MODULE_REGISTRY } from "../core/modules/registry.js";
 import { useCan } from "../core/rbac/can.js";
@@ -26,6 +28,8 @@ import { logout as apiLogout } from "../core/api/auth.js";
 import { NotificationBell } from "../core/notifications/NotificationBell.js";
 
 const DRAWER_WIDTH = 248;
+const COLLAPSED_WIDTH = 64;
+const SIDEBAR_KEY = "hubcentral.sidebar.collapsed";
 
 /**
  * Renderiza a casca com a navegação por módulos e a área de conteúdo.
@@ -45,6 +49,28 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
   const clear = useSessionStore((s) => s.clear);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
+  // Preferência de layout: menu lateral recolhido (apenas no drawer permanente).
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return typeof window !== "undefined" && window.localStorage.getItem(SIDEBAR_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleCollapsed = (): void =>
+    setCollapsed((v) => {
+      const next = !v;
+      try {
+        window.localStorage.setItem(SIDEBAR_KEY, next ? "1" : "0");
+      } catch {
+        // Ignora indisponibilidade de localStorage.
+      }
+      return next;
+    });
+
+  // Largura efetiva do drawer permanente conforme o estado de recolhimento.
+  const drawerWidth = collapsed ? COLLAPSED_WIDTH : DRAWER_WIDTH;
 
   const isSuperadmin = user?.role === "superadmin";
 
@@ -73,24 +99,41 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
     navigate("/login", { replace: true });
   }
 
-  const drawer = (
+  // Renderiza o conteúdo do drawer. O mobile sempre recebe `isCollapsed=false`
+  // (modo expandido). O drawer permanente passa o estado real de recolhimento.
+  const renderDrawer = (isCollapsed: boolean): JSX.Element => (
     <Box role="navigation">
-      <Toolbar>
-        <Typography variant="h6" noWrap fontWeight={700}>
-          {systemName}
-        </Typography>
+      <Toolbar sx={{ justifyContent: isCollapsed ? "center" : "space-between" }}>
+        {!isCollapsed && (
+          <Typography variant="h6" noWrap fontWeight={700}>
+            {systemName}
+          </Typography>
+        )}
+        <Tooltip title={isCollapsed ? "expandir menu" : "recolher menu"} placement="right">
+          <IconButton
+            onClick={toggleCollapsed}
+            aria-label={isCollapsed ? "expandir menu" : "recolher menu"}
+            sx={{ display: { xs: "none", sm: "inline-flex" } }}
+          >
+            {isCollapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+          </IconButton>
+        </Tooltip>
       </Toolbar>
       <Divider />
       {menuGroups.map((group, gi) => (
         <List
           key={group.title}
-          subheader={<ListSubheader component="div" disableSticky>{group.title}</ListSubheader>}
+          subheader={
+            isCollapsed ? undefined : (
+              <ListSubheader component="div" disableSticky>{group.title}</ListSubheader>
+            )
+          }
           sx={{ borderTop: gi > 0 ? 1 : 0, borderColor: "divider" }}
         >
           {group.items.map((entry) => {
             const Icon = entry.icon;
             const selected = location.pathname.startsWith(entry.path);
-            return (
+            const button = (
               <ListItemButton
                 key={entry.path}
                 selected={selected}
@@ -98,12 +141,22 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
                   navigate(entry.path);
                   setMobileOpen(false);
                 }}
+                sx={isCollapsed ? { justifyContent: "center", px: 2.5 } : {}}
               >
-                <ListItemIcon>
+                <ListItemIcon
+                  sx={isCollapsed ? { minWidth: 0, mr: "auto", justifyContent: "center" } : {}}
+                >
                   <Icon />
                 </ListItemIcon>
-                <ListItemText primary={entry.label} />
+                {!isCollapsed && <ListItemText primary={entry.label} />}
               </ListItemButton>
+            );
+            return isCollapsed ? (
+              <Tooltip key={entry.path} title={entry.label} placement="right">
+                {button}
+              </Tooltip>
+            ) : (
+              button
             );
           })}
         </List>
@@ -152,7 +205,7 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
         </Toolbar>
       </AppBar>
 
-      <Box component="nav" sx={{ width: { sm: DRAWER_WIDTH }, flexShrink: { sm: 0 } }}>
+      <Box component="nav" sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}>
         <Drawer
           variant="temporary"
           open={mobileOpen}
@@ -160,18 +213,25 @@ export function Shell({ children }: { children: ReactNode }): JSX.Element {
           ModalProps={{ keepMounted: true }}
           sx={{ display: { xs: "block", sm: "none" }, "& .MuiDrawer-paper": { width: DRAWER_WIDTH } }}
         >
-          {drawer}
+          {renderDrawer(false)}
         </Drawer>
         <Drawer
           variant="permanent"
           open
-          sx={{ display: { xs: "none", sm: "block" }, "& .MuiDrawer-paper": { width: DRAWER_WIDTH } }}
+          sx={{
+            display: { xs: "none", sm: "block" },
+            "& .MuiDrawer-paper": {
+              width: drawerWidth,
+              overflowX: "hidden",
+              transition: (t) => t.transitions.create("width", { duration: t.transitions.duration.shorter }),
+            },
+          }}
         >
-          {drawer}
+          {renderDrawer(collapsed)}
         </Drawer>
       </Box>
 
-      <Box component="main" sx={{ flexGrow: 1, p: 3, width: { sm: `calc(100% - ${DRAWER_WIDTH}px)` } }}>
+      <Box component="main" sx={{ flexGrow: 1, p: 3, width: { sm: `calc(100% - ${drawerWidth}px)` } }}>
         <Toolbar />
         {children}
       </Box>

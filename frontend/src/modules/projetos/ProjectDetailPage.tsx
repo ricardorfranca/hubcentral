@@ -7,17 +7,19 @@
  * de Gantt, desarquivar e relatório executivo em PDF.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Box, Typography, Paper, Grid2 as Grid, Stack, Chip, Button, CircularProgress, List, ListItem,
-  ListItemText, IconButton, TextField, MenuItem, Divider, Tabs, Tab,
+  ListItemText, IconButton, TextField, MenuItem, Divider, Tabs, Tab, ToggleButton, Tooltip,
 } from "@mui/material";
 import ArchiveIcon from "@mui/icons-material/Archive";
 import UnarchiveIcon from "@mui/icons-material/Unarchive";
 import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
 import DeleteIcon from "@mui/icons-material/Delete";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import CenterFocusStrongIcon from "@mui/icons-material/CenterFocusStrong";
+import CenterFocusWeakIcon from "@mui/icons-material/CenterFocusWeak";
 import { useQuery } from "@tanstack/react-query";
 import {
   useProject, useArchiveProject, useUnarchiveProject, useAddMember, useRemoveMember,
@@ -29,6 +31,9 @@ import { ProjectBoard } from "./ProjectBoard.js";
 import { TaskDetailDialog } from "./TaskDetailDialog.js";
 import { GanttChart } from "./GanttChart.js";
 import { brl, fmtMinutes } from "./format.js";
+
+/** Chave de localStorage do "Modo foco", por projeto. */
+const focusKey = (projectId: string): string => `hubcentral.projetos.focus.${projectId}`;
 
 /**
  * Página de detalhe de um projeto.
@@ -57,6 +62,36 @@ export function ProjectDetailPage(): JSX.Element {
   const [resCost, setResCost] = useState("");
   const [tab, setTab] = useState(0);
   const [openTask, setOpenTask] = useState<string | null>(taskId ?? null);
+  // "Modo foco": oculta a coluna de informações e expande o quadro. Persistido
+  // por projeto no localStorage.
+  const [focus, setFocus] = useState<boolean>(() => {
+    try {
+      return typeof window !== "undefined" && window.localStorage.getItem(focusKey(id)) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  // Ao trocar de projeto (ou quando o `id` chega depois do 1º render), reflete
+  // o valor salvo daquele projeto.
+  useEffect(() => {
+    try {
+      setFocus(window.localStorage.getItem(focusKey(id)) === "1");
+    } catch {
+      setFocus(false);
+    }
+  }, [id]);
+
+  const toggleFocus = (): void =>
+    setFocus((v) => {
+      const next = !v;
+      try {
+        window.localStorage.setItem(focusKey(id), next ? "1" : "0");
+      } catch {
+        // Ignora indisponibilidade de localStorage.
+      }
+      return next;
+    });
 
   if (isLoading || !project) {
     return <Box sx={{ display: "grid", placeItems: "center", height: 200 }}><CircularProgress /></Box>;
@@ -73,6 +108,18 @@ export function ProjectDetailPage(): JSX.Element {
         </Box>
         <Stack direction="row" spacing={1} alignItems="center">
           <Chip label={archived ? "Arquivado" : "Ativo"} color={archived ? "default" : "success"} />
+          <Tooltip title="Ocultar informações e expandir o quadro">
+            <ToggleButton
+              value="focus"
+              size="small"
+              selected={focus}
+              onChange={toggleFocus}
+              aria-label={focus ? "desativar modo foco" : "ativar modo foco"}
+            >
+              {focus ? <CenterFocusStrongIcon fontSize="small" /> : <CenterFocusWeakIcon fontSize="small" />}
+              &nbsp;Modo foco
+            </ToggleButton>
+          </Tooltip>
           <Button size="small" startIcon={<PictureAsPdfIcon />} onClick={() => void downloadProjectReport(id)}>
             Relatório
           </Button>
@@ -86,6 +133,7 @@ export function ProjectDetailPage(): JSX.Element {
       </Stack>
 
       <Grid container spacing={2}>
+        {!focus && (
         <Grid size={{ xs: 12, md: 4 }}>
           <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
             <Typography variant="h6" gutterBottom>Resumo</Typography>
@@ -189,8 +237,9 @@ export function ProjectDetailPage(): JSX.Element {
             )}
           </Paper>
         </Grid>
+        )}
 
-        <Grid size={{ xs: 12, md: 8 }}>
+        <Grid size={{ xs: 12, md: focus ? 12 : 8 }}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ mb: 2 }}>
               <Tab label="Kanban" />
