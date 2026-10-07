@@ -14,7 +14,7 @@ export interface AdminUser {
   email: string;
   full_name: string;
   role: UserRole;
-  status: "active" | "disabled";
+  status: "active" | "disabled" | "deleted";
   password_set: boolean;
   /** Ramal do usuário no PABX (discagem via curl). */
   extension: string | null;
@@ -62,6 +62,18 @@ export function updateUser(
   patch: { role?: UserRole; status?: "active" | "disabled"; extension?: string | null; full_name?: string; email?: string },
 ): Promise<AdminUser> {
   return request<AdminUser>(`/api/iam/users/${id}`, { method: "PATCH", body: patch });
+}
+
+/**
+ * Exclui (lápide) um usuário, reatribuindo o trabalho ativo ao destino. A ação
+ * é irreversível: o usuário some das listas e deixa de existir operacionalmente,
+ * mas o histórico e os logs de ação são preservados.
+ */
+export function deleteUser(id: string, reassignToUserId: string): Promise<void> {
+  return request<void>(`/api/iam/users/${id}`, {
+    method: "DELETE",
+    body: { reassign_to_user_id: reassignToUserId },
+  });
 }
 
 /** Lê as permissões de um usuário. */

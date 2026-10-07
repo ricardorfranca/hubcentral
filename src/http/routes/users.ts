@@ -9,9 +9,10 @@
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { withTransaction } from "../../core/db/pool.js";
+import { DomainError, ErrorCode } from "../../core/errors.js";
 import {
   listUsers, listUserOptions, inviteUser, resendInvite, setUserRole, setUserStatus, setUserExtension,
-  setUserProfile, getUserById, setPassword,
+  setUserProfile, deleteUser, getUserById, setPassword,
   type UserRole,
 } from "../../core/iam/identity-service.js";
 import { authorize, listUserPermissions, setUserPermissions } from "../../core/iam/rbac.js";
@@ -21,6 +22,9 @@ import { sendEmail } from "../../core/email/email-service.js";
 
 /** Permissão exigida para administrar usuários. */
 const ADMIN_NS = "core:usuarios:gerenciar";
+
+/** Formato canônico de UUID (não há validador compartilhado no backend). */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Registra as rotas de administração de usuários.
@@ -114,6 +118,31 @@ export function registerUserRoutes(app: FastifyInstance, pool: Pool): void {
         return reply.status(404).send({ code: "IAM_USER_NOT_FOUND", message: "Usuário não encontrado.", details: {} });
       }
       return reply.send(updated);
+    },
+  );
+
+  // Excluir (lápide) um usuário, reatribuindo o trabalho ativo ao destino.
+  app.delete<{ Params: { id: string }; Body: { reassign_to_user_id?: string } }>(
+    "/api/iam/users/:id",
+    async (request, reply) => {
+      await withTransaction(pool, async (c) => {
+        await authorize(c, request.userId, ADMIN_NS);
+        // Entradas malformadas viram NOT_FOUND (não 500): um UUID inválido faria
+        // o WHERE id = $1 lançar 22P02.
+        if (!UUID_RE.test(request.params.id)) {
+          throw new DomainError(ErrorCode.IAM_USER_NOT_FOUND, "Usuário não encontrado.", {});
+        }
+        const reassignTo = request.body?.reassign_to_user_id;
+        if (!reassignTo || !UUID_RE.test(reassignTo)) {
+          throw new DomainError(
+            ErrorCode.IAM_REASSIGN_TARGET_NOT_FOUND,
+            "Informe um usuário de destino válido para a reatribuição.",
+            {},
+          );
+        }
+        await deleteUser(c, request.params.id, reassignTo, request.userId);
+      });
+      return reply.status(204).send();
     },
   );
 

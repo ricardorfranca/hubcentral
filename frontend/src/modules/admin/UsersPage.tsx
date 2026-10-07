@@ -19,10 +19,12 @@ import ReplayIcon from "@mui/icons-material/Replay";
 import KeyIcon from "@mui/icons-material/Key";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import EditIcon from "@mui/icons-material/Edit";
-import { listUsers, inviteUser, updateUser, resendInvite, setUserPassword, type AdminUser } from "../../core/api/iam.js";
+import DeleteIcon from "@mui/icons-material/Delete";
+import { listUsers, inviteUser, updateUser, resendInvite, setUserPassword, deleteUser, type AdminUser } from "../../core/api/iam.js";
 import { getUserChannel, saveUserChannel, type UserChannel } from "../../core/api/comms.js";
 import { ApiError } from "../../core/api/client.js";
 import type { UserRole } from "../../core/api/types.js";
+import { useSessionStore } from "../../core/auth/session-store.js";
 import { PermissionsDialog } from "./PermissionsDialog.js";
 
 const ROLES: UserRole[] = ["superadmin", "module_admin", "operator", "client"];
@@ -40,7 +42,9 @@ export function UsersPage(): JSX.Element {
   const [pwdUser, setPwdUser] = useState<AdminUser | null>(null);
   const [chanUser, setChanUser] = useState<AdminUser | null>(null);
   const [editUser, setEditUser] = useState<AdminUser | null>(null);
+  const [delUser, setDelUser] = useState<AdminUser | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const currentUserId = useSessionStore((s) => s.user?.id);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["iam", "users"] });
 
@@ -121,6 +125,11 @@ export function UsersPage(): JSX.Element {
                 <Tooltip title="Permissões">
                   <IconButton size="small" onClick={() => setPermUser(u)}><SecurityIcon fontSize="small" /></IconButton>
                 </Tooltip>
+                {u.id !== currentUserId && (
+                  <Tooltip title="Excluir usuário">
+                    <IconButton size="small" color="error" onClick={() => setDelUser(u)}><DeleteIcon fontSize="small" /></IconButton>
+                  </Tooltip>
+                )}
               </TableCell>
             </TableRow>
           ))}
@@ -131,6 +140,15 @@ export function UsersPage(): JSX.Element {
       {permUser && <PermissionsDialog user={permUser} onClose={() => setPermUser(null)} />}
       {pwdUser && <PasswordDialog user={pwdUser} onClose={() => setPwdUser(null)} onError={setError} />}
       {editUser && <EditUserDialog user={editUser} onClose={() => setEditUser(null)} onDone={invalidate} onError={setError} />}
+      {delUser && (
+        <DeleteUserDialog
+          user={delUser}
+          users={users ?? []}
+          onClose={() => setDelUser(null)}
+          onDone={invalidate}
+          onError={setError}
+        />
+      )}
       {chanUser && <WhatsappChannelDialog user={chanUser} onClose={() => setChanUser(null)} onError={setError} />}
     </Box>
   );
@@ -316,6 +334,59 @@ function EditUserDialog({
         <Button onClick={onClose}>Cancelar</Button>
         <Button variant="contained" onClick={() => save.mutate()} disabled={save.isPending || name.trim() === ""}>
           {save.isPending ? "Salvando…" : "Salvar"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+/**
+ * Diálogo de exclusão (lápide) de um usuário. Avisa que a ação é irreversível e
+ * que o trabalho ativo será transferido ao destino escolhido. O seletor de
+ * destino exclui o próprio usuário em exclusão e os que não estão ativos
+ * (coerente com IAM_REASSIGN_TARGET_INACTIVE). Sem destino, Confirmar fica
+ * desabilitado.
+ */
+function DeleteUserDialog({
+  user, users, onClose, onDone, onError,
+}: {
+  user: AdminUser; users: AdminUser[]; onClose: () => void; onDone: () => void; onError: (m: string) => void;
+}): JSX.Element {
+  const [targetId, setTargetId] = useState("");
+  const candidates = users.filter((u) => u.id !== user.id && u.status === "active");
+  const remove = useMutation({
+    mutationFn: () => deleteUser(user.id, targetId),
+    onSuccess: () => { onDone(); onClose(); },
+    onError: (e) => onError(e instanceof ApiError ? e.message : "Falha ao excluir o usuário."),
+  });
+
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="xs">
+      <DialogTitle>Excluir usuário — {user.full_name}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          <Alert severity="warning">
+            Esta ação é irreversível. O usuário deixará de existir no sistema, mas o histórico e os
+            logs de ação são preservados. Todo o trabalho ativo (projetos, oportunidades, tarefas,
+            carteira de contas etc.) será transferido ao usuário de destino.
+          </Alert>
+          <Select
+            displayEmpty
+            value={targetId}
+            onChange={(e) => setTargetId(e.target.value)}
+            inputProps={{ "aria-label": "Usuário de destino da reatribuição" }}
+          >
+            <MenuItem value="" disabled>Selecione o usuário de destino</MenuItem>
+            {candidates.map((u) => (
+              <MenuItem key={u.id} value={u.id}>{u.full_name} ({u.email})</MenuItem>
+            ))}
+          </Select>
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancelar</Button>
+        <Button color="error" variant="contained" onClick={() => remove.mutate()} disabled={remove.isPending || targetId === ""}>
+          {remove.isPending ? "Excluindo…" : "Confirmar exclusão"}
         </Button>
       </DialogActions>
     </Dialog>

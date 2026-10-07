@@ -2,6 +2,17 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.14.0] - 2026-10-07
+
+### Adicionado
+
+- **Editar nome e e-mail de usuário.** Em Administração → Usuários, cada linha ganhou a ação "Editar nome e e-mail", que abre um diálogo com os valores atuais já preenchidos. O e-mail é validado contra duplicidade (não pode ser de outro usuário) e a alteração fica registrada no histórico de auditoria.
+- **Excluir usuário com reatribuição e preservação de histórico.** Nova ação "Excluir usuário" na administração. Como a plataforma mantém logs de ação imutáveis, a exclusão é feita de forma segura: o usuário é anonimizado e deixa de existir operacionalmente (some das listas, não loga mais, não aparece como responsável de nada), mas o histórico e os logs de ação permanecem intactos. No momento da exclusão é obrigatório escolher um usuário de destino (ativo) que recebe todo o trabalho em aberto — projetos, oportunidades, tarefas, carteira de contas, etc. — para não deixar nada órfão. A ação é bloqueada para a própria conta e para o último superadministrador ativo.
+
+### Operação
+
+- **Nova migração de banco: execute `npm run migrate:up`.** Adiciona o status `deleted` e as colunas `deleted_at`/`deleted_by` em `core.users` para suportar a exclusão lógica (lápide) de usuários. Preserva os dados existentes; a tabela de logs imutáveis (`core.system_logs`) não é alterada.
+
 ## [0.13.1] - 2026-10-05
 
 ### Corrigido

@@ -26,7 +26,7 @@ export interface IamUser {
   email: string;
   full_name: string;
   role: UserRole;
-  status: "active" | "disabled";
+  status: "active" | "disabled" | "deleted";
   password_set: boolean;
   /** Ramal do usuário no PABX (discagem via curl). */
   extension: string | null;
@@ -57,8 +57,10 @@ export async function getUserById(client: PoolClient, userId: string): Promise<I
  * @returns Lista de usuários.
  */
 export async function listUsers(client: PoolClient): Promise<IamUser[]> {
+  // Oculta as lápides (status='deleted') da administração: usuários excluídos
+  // deixam de existir operacionalmente (RF2).
   const { rows } = await client.query<IamUser>(
-    `SELECT ${USER_COLUMNS} FROM core.users ORDER BY email`,
+    `SELECT ${USER_COLUMNS} FROM core.users WHERE status <> 'deleted' ORDER BY email`,
   );
   return rows;
 }
@@ -281,6 +283,158 @@ export async function setUserProfile(
 }
 
 /**
+ * "Exclui" um usuário (lápide): reatribui o trabalho ativo ao destino, remove
+ * os dados estritamente por-usuário, anula/preserva históricos conforme o mapa
+ * de FKs e anonimiza a linha, preservando o `id` para a integridade dos logs
+ * imutáveis (`core.system_logs` NUNCA é tocado). Operação atômica: DEVE rodar
+ * dentro de uma transação do chamador (`withTransaction`). Auditado antes das
+ * mutações, na mesma transação (durabilidade só no COMMIT).
+ *
+ * @param client - Cliente PostgreSQL (transacional).
+ * @param userId - `user_id` a excluir.
+ * @param reassignToUserId - `user_id` de destino do trabalho ativo (obrigatório).
+ * @param actorUserId - Autor da exclusão.
+ * @throws {DomainError} `IAM_USER_NOT_FOUND` se a origem não existe ou já é lápide.
+ * @throws {DomainError} `IAM_CANNOT_DELETE_SELF` se o autor tenta se excluir.
+ * @throws {DomainError} `IAM_REASSIGN_TARGET_SAME` se o destino é a própria origem.
+ * @throws {DomainError} `IAM_REASSIGN_TARGET_NOT_FOUND` se o destino não existe.
+ * @throws {DomainError} `IAM_REASSIGN_TARGET_INACTIVE` se o destino não está ativo.
+ * @throws {DomainError} `IAM_LAST_SUPERADMIN` se removeria o último superadmin ativo.
+ */
+export async function deleteUser(
+  client: PoolClient,
+  userId: string,
+  reassignToUserId: string,
+  actorUserId: string | null = null,
+): Promise<void> {
+  // --- Validações (a ordem importa) ---
+  const origin = await getUserById(client, userId);
+  if (!origin || origin.status === "deleted") {
+    // Lápide já existente é tratada como inexistente para a administração.
+    throw new DomainError(ErrorCode.IAM_USER_NOT_FOUND, "Usuário não encontrado.", { user_id: userId });
+  }
+  if (actorUserId === userId) {
+    throw new DomainError(ErrorCode.IAM_CANNOT_DELETE_SELF, "Você não pode excluir a própria conta.", {
+      user_id: userId,
+    });
+  }
+  if (reassignToUserId === userId) {
+    throw new DomainError(
+      ErrorCode.IAM_REASSIGN_TARGET_SAME,
+      "O usuário de destino não pode ser o próprio usuário excluído.",
+      { user_id: userId },
+    );
+  }
+  const target = await getUserById(client, reassignToUserId);
+  if (!target) {
+    throw new DomainError(ErrorCode.IAM_REASSIGN_TARGET_NOT_FOUND, "Usuário de destino não encontrado.", {
+      reassign_to_user_id: reassignToUserId,
+    });
+  }
+  if (target.status !== "active") {
+    throw new DomainError(ErrorCode.IAM_REASSIGN_TARGET_INACTIVE, "O usuário de destino não está ativo.", {
+      reassign_to_user_id: reassignToUserId,
+    });
+  }
+  if (origin.role === "superadmin") {
+    const { rows } = await client.query<{ c: string }>(
+      `SELECT count(*)::text AS c FROM core.users
+       WHERE role = 'superadmin' AND status = 'active' AND id <> $1`,
+      [userId],
+    );
+    if (Number(rows[0]!.c) === 0) {
+      throw new DomainError(
+        ErrorCode.IAM_LAST_SUPERADMIN,
+        "Não é possível excluir o último superadministrador ativo.",
+        { user_id: userId },
+      );
+    }
+  }
+
+  // --- Auditoria ANTES das mutações, na mesma transação (RF2.7) ---
+  // Registra o estado real antes da anonimização; a linha de system_logs
+  // referencia o AUTOR (não a origem), e a autoexclusão é barrada acima, então
+  // o autor nunca é a linha anonimizada. A durabilidade vem só do COMMIT.
+  await auditLog(client, {
+    userId: actorUserId,
+    module: "core",
+    action: "IAM_USUARIO_EXCLUIDO",
+    payloadBefore: { id: origin.id, email: origin.email, full_name: origin.full_name, role: origin.role },
+    payloadAfter: { reassigned_to: target.id },
+  });
+
+  // --- Reatribuição do trabalho ativo (Categoria 1 + account_manager) ---
+  // SET <col> = destino WHERE <col> = origem. Todas são colunas simples (sem PK
+  // composta de usuário) => sem risco de colisão.
+  const reassign: { table: string; column: string }[] = [
+    { table: "core.segments", column: "created_by" },
+    { table: "core.settings", column: "updated_by" },
+    { table: "core.user_channels", column: "updated_by" },
+    { table: "mod_crm.leads", column: "assigned_to" },
+    { table: "mod_crm.leads", column: "created_by" },
+    { table: "mod_crm.sla_config", column: "updated_by" },
+    { table: "mod_crm.accounts", column: "owner_user_id" },
+    { table: "mod_crm.opportunities", column: "owner_user_id" },
+    { table: "mod_crm.opportunities", column: "created_by" },
+    { table: "mod_crm.activities", column: "assigned_to" },
+    { table: "mod_crm.activities", column: "created_by" },
+    { table: "mod_crm.campaigns", column: "created_by" },
+    { table: "mod_projetos.projects", column: "owner_user_id" },
+    { table: "mod_projetos.projects", column: "created_by" },
+    { table: "mod_projetos.tasks", column: "created_by" },
+    { table: "mod_projetos.tasks", column: "assignee_user_id" },
+    { table: "mod_projetos.project_comments", column: "author_user_id" },
+    { table: "mod_projetos.task_comments", column: "author_user_id" },
+    { table: "mod_projetos.task_attachments", column: "uploaded_by" },
+    { table: "core.contacts", column: "account_manager_user_id" },
+  ];
+  for (const { table, column } of reassign) {
+    await client.query(
+      `UPDATE ${table} SET ${column} = $2 WHERE ${column} = $1`,
+      [userId, reassignToUserId],
+    );
+  }
+
+  // --- Histórico (Categoria 2): SET NULL na FK, preservando o nome snapshot ---
+  // Não reatribuir: reescreveria "quem fez a ação". Não tocar em
+  // user_name/from_user_name (snapshots de autoria).
+  await client.query(`UPDATE mod_crm.lead_timeline SET user_id = NULL WHERE user_id = $1`, [userId]);
+  await client.query(`UPDATE mod_crm.messages SET from_user_id = NULL WHERE from_user_id = $1`, [userId]);
+
+  // --- API keys (Categoria 5): anula o autor; a chave segue válida ---
+  await client.query(`UPDATE core.api_keys SET created_by = NULL WHERE created_by = $1`, [userId]);
+
+  // --- Dados estritamente por-usuário (Categoria 4): DELETE explícito ---
+  // Reproduz o efeito do ON DELETE CASCADE, que não dispara sem delete físico
+  // do pai. Nenhuma destas tabelas é imutável.
+  await client.query(`DELETE FROM core.user_permissions WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM core.sessions WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM core.user_channels WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM core.notifications WHERE recipient_user_id = $1`, [userId]);
+  await client.query(`DELETE FROM mod_crm.message_reads WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM mod_projetos.project_members WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM mod_projetos.task_assignees WHERE user_id = $1`, [userId]);
+
+  // --- Lápide: anonimiza a PII e marca como excluído, preservando o id ---
+  // O e-mail sentinela 'deleted+<id>@deleted.local' é único por construção
+  // (não colide com o índice UNIQUE de citext).
+  await client.query(
+    `UPDATE core.users
+     SET status = 'deleted',
+         deleted_at = now(),
+         deleted_by = $2,
+         full_name = 'Usuário excluído',
+         email = 'deleted+' || id || '@deleted.local',
+         password_hash = NULL,
+         password_set = false
+     WHERE id = $1`,
+    [userId, actorUserId],
+  );
+
+  // Categoria 3 (core.system_logs): NADA — imutável, preservado por construção.
+}
+
+/**
  * Provisiona (convida) um novo usuário com senha temporária e `password_set`
  * false, exigindo definição de nova senha no primeiro acesso (§5.6).
  *
@@ -411,7 +565,7 @@ export async function authenticate(
     email: string;
     full_name: string;
     role: UserRole;
-    status: "active" | "disabled";
+    status: "active" | "disabled" | "deleted";
     password_set: boolean;
     password_hash: string | null;
     extension: string | null;
