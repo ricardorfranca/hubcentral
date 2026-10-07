@@ -56,10 +56,10 @@ export function resendInvite(id: string): Promise<void> {
   return request<void>(`/api/iam/users/${id}/resend`, { method: "POST" });
 }
 
-/** Altera papel, status e/ou ramal de um usuário. */
+/** Altera papel, status, ramal, nome e/ou e-mail de um usuário. */
 export function updateUser(
   id: string,
-  patch: { role?: UserRole; status?: "active" | "disabled"; extension?: string | null },
+  patch: { role?: UserRole; status?: "active" | "disabled"; extension?: string | null; full_name?: string; email?: string },
 ): Promise<AdminUser> {
   return request<AdminUser>(`/api/iam/users/${id}`, { method: "PATCH", body: patch });
 }

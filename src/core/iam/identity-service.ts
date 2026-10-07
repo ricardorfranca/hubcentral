@@ -175,6 +175,111 @@ export async function setUserExtension(
   });
 }
 
+/** Domínio reservado para e-mails de lápide (usuário excluído). */
+const DELETED_EMAIL_DOMAIN = "@deleted.local";
+
+/**
+ * Atualiza nome e/ou e-mail de um usuário (RF1). Campos ausentes não são
+ * tocados; chamada sem campos não altera dados nem gera auditoria. Auditado.
+ *
+ * @param client - Cliente PostgreSQL.
+ * @param userId - `user_id` alvo.
+ * @param patch - Campos a atualizar (`full_name` e/ou `email`), ambos opcionais.
+ * @param actorUserId - Autor da alteração.
+ * @returns O usuário atualizado.
+ * @throws {DomainError} `IAM_USER_NOT_FOUND` se o usuário não existe.
+ * @throws {DomainError} `IAM_INVALID_NAME` se `full_name` vier vazio/em branco.
+ * @throws {DomainError} `IAM_INVALID_EMAIL` se o e-mail estiver no domínio reservado `@deleted.local`.
+ * @throws {DomainError} `IAM_EMAIL_TAKEN` se o e-mail já for de OUTRO usuário.
+ */
+export async function setUserProfile(
+  client: PoolClient,
+  userId: string,
+  patch: { full_name?: string | undefined; email?: string | undefined },
+  actorUserId: string | null = null,
+): Promise<IamUser> {
+  const before = await getUserById(client, userId);
+  if (!before) {
+    throw new DomainError(ErrorCode.IAM_USER_NOT_FOUND, "Usuário não encontrado.", { user_id: userId });
+  }
+
+  // Normaliza e valida os campos presentes no patch.
+  let name: string | undefined;
+  if (patch.full_name !== undefined) {
+    name = patch.full_name.trim();
+    if (name === "") {
+      throw new DomainError(ErrorCode.IAM_INVALID_NAME, "O nome não pode ficar em branco.", { user_id: userId });
+    }
+  }
+
+  let email: string | undefined;
+  if (patch.email !== undefined) {
+    email = patch.email.trim();
+    // O domínio-sentinela é reservado às lápides (deleted+<id>@deleted.local);
+    // digitá-lo manualmente arriscaria colisão/confusão com um usuário excluído.
+    if (email.toLowerCase().endsWith(DELETED_EMAIL_DOMAIN)) {
+      throw new DomainError(ErrorCode.IAM_INVALID_EMAIL, "Este e-mail usa um domínio reservado pelo sistema.", {
+        email,
+      });
+    }
+    // Duplicidade só contra OUTROS usuários; reenviar o próprio e-mail é aceito.
+    const dup = await client.query<{ id: string }>(
+      `SELECT id FROM core.users WHERE email = $1 AND id <> $2`,
+      [email, userId],
+    );
+    if (dup.rows[0]) {
+      throw new DomainError(ErrorCode.IAM_EMAIL_TAKEN, "Já existe um usuário com este e-mail.", { email });
+    }
+  }
+
+  // Monta o SET dinamicamente, só com as colunas presentes (sem COALESCE).
+  const sets: string[] = [];
+  const vals: unknown[] = [userId];
+  if (name !== undefined) {
+    sets.push(`full_name = $${vals.push(name)}`);
+  }
+  if (email !== undefined) {
+    sets.push(`email = $${vals.push(email)}`);
+  }
+  if (sets.length === 0) {
+    // RF1.3 — nada a atualizar: não altera dados nem registra auditoria.
+    return before;
+  }
+  sets.push(`updated_at = now()`);
+
+  try {
+    await client.query(`UPDATE core.users SET ${sets.join(", ")} WHERE id = $1`, vals);
+  } catch (err) {
+    // Defesa em profundidade: o dono do invariante UNIQUE(email) é o banco.
+    // Remapeia a corrida (unique_violation) para a mensagem pt-BR amigável.
+    if ((err as { code?: string }).code === "23505") {
+      throw new DomainError(ErrorCode.IAM_EMAIL_TAKEN, "Já existe um usuário com este e-mail.", { email });
+    }
+    throw err;
+  }
+
+  // Audita só os campos efetivamente alterados.
+  const payloadBefore: Record<string, unknown> = {};
+  const payloadAfter: Record<string, unknown> = {};
+  if (name !== undefined) {
+    payloadBefore.full_name = before.full_name;
+    payloadAfter.full_name = name;
+  }
+  if (email !== undefined) {
+    payloadBefore.email = before.email;
+    payloadAfter.email = email;
+  }
+  await auditLog(client, {
+    userId: actorUserId,
+    module: "core",
+    action: "IAM_PERFIL_ALTERADO",
+    payloadBefore,
+    payloadAfter,
+  });
+
+  return (await getUserById(client, userId)) as IamUser;
+}
+
 /**
  * Provisiona (convida) um novo usuário com senha temporária e `password_set`
  * false, exigindo definição de nova senha no primeiro acesso (§5.6).

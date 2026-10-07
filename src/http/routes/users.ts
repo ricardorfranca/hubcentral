@@ -11,7 +11,7 @@ import type { Pool } from "pg";
 import { withTransaction } from "../../core/db/pool.js";
 import {
   listUsers, listUserOptions, inviteUser, resendInvite, setUserRole, setUserStatus, setUserExtension,
-  getUserById, setPassword,
+  setUserProfile, getUserById, setPassword,
   type UserRole,
 } from "../../core/iam/identity-service.js";
 import { authorize, listUserPermissions, setUserPermissions } from "../../core/iam/rbac.js";
@@ -93,8 +93,8 @@ export function registerUserRoutes(app: FastifyInstance, pool: Pool): void {
     return reply.status(204).send();
   });
 
-  // Alterar papel, status e/ou ramal.
-  app.patch<{ Params: { id: string }; Body: { role?: UserRole; status?: "active" | "disabled"; extension?: string | null } }>(
+  // Alterar papel, status, ramal, nome e/ou e-mail.
+  app.patch<{ Params: { id: string }; Body: { role?: UserRole; status?: "active" | "disabled"; extension?: string | null; full_name?: string; email?: string } }>(
     "/api/iam/users/:id",
     async (request, reply) => {
       const updated = await withTransaction(pool, async (c) => {
@@ -102,6 +102,12 @@ export function registerUserRoutes(app: FastifyInstance, pool: Pool): void {
         if (request.body.role) await setUserRole(c, request.params.id, request.body.role, request.userId);
         if (request.body.status) await setUserStatus(c, request.params.id, request.body.status, request.userId);
         if (request.body.extension !== undefined) await setUserExtension(c, request.params.id, request.body.extension, request.userId);
+        if (request.body.full_name !== undefined || request.body.email !== undefined) {
+          await setUserProfile(c, request.params.id, {
+            full_name: request.body.full_name,
+            email: request.body.email,
+          }, request.userId);
+        }
         return getUserById(c, request.params.id);
       });
       if (!updated) {

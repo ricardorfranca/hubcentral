@@ -49,6 +49,11 @@ const STATUS_BY_CODE: Record<string, number> = {
   [ErrorCode.MODULE_ALREADY_REGISTERED]: 409,
   [ErrorCode.CONTACT_HAS_REFERENCES]: 409,
   [ErrorCode.API_KEY_NOT_FOUND]: 404,
+  [ErrorCode.IAM_USER_NOT_FOUND]: 404,
+  [ErrorCode.IAM_REASSIGN_TARGET_NOT_FOUND]: 404,
+  [ErrorCode.IAM_CANNOT_DELETE_SELF]: 409,
+  [ErrorCode.IAM_LAST_SUPERADMIN]: 409,
+  [ErrorCode.IAM_EMAIL_TAKEN]: 409,
   // Demais erros de validação -> 400 (default abaixo).
 };
 

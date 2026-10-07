@@ -123,6 +123,20 @@ export const ErrorCode = {
   IAM_RESEND_COOLDOWN: "IAM_RESEND_COOLDOWN",
   /** Usuário não encontrado. */
   IAM_USER_NOT_FOUND: "IAM_USER_NOT_FOUND",
+  /** Nome (full_name) do usuário vazio/em branco (RF1). */
+  IAM_INVALID_NAME: "IAM_INVALID_NAME",
+  /** E-mail no domínio reservado `@deleted.local` (espaço de lápides) — RF1. */
+  IAM_INVALID_EMAIL: "IAM_INVALID_EMAIL",
+  /** Tentativa de o administrador excluir a própria conta (RF2). */
+  IAM_CANNOT_DELETE_SELF: "IAM_CANNOT_DELETE_SELF",
+  /** Usuário de destino da reatribuição não existe (RF2). */
+  IAM_REASSIGN_TARGET_NOT_FOUND: "IAM_REASSIGN_TARGET_NOT_FOUND",
+  /** Usuário de destino da reatribuição é o próprio usuário excluído (RF2). */
+  IAM_REASSIGN_TARGET_SAME: "IAM_REASSIGN_TARGET_SAME",
+  /** Usuário de destino da reatribuição não está ativo (RF2). */
+  IAM_REASSIGN_TARGET_INACTIVE: "IAM_REASSIGN_TARGET_INACTIVE",
+  /** Exclusão removeria o último superadministrador ativo (RF2). */
+  IAM_LAST_SUPERADMIN: "IAM_LAST_SUPERADMIN",
   /** Sessão inválida, expirada ou revogada. */
   IAM_INVALID_SESSION: "IAM_INVALID_SESSION",
   /** Conta desabilitada. */

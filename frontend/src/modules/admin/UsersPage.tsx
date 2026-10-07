@@ -18,6 +18,7 @@ import SecurityIcon from "@mui/icons-material/Security";
 import ReplayIcon from "@mui/icons-material/Replay";
 import KeyIcon from "@mui/icons-material/Key";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
+import EditIcon from "@mui/icons-material/Edit";
 import { listUsers, inviteUser, updateUser, resendInvite, setUserPassword, type AdminUser } from "../../core/api/iam.js";
 import { getUserChannel, saveUserChannel, type UserChannel } from "../../core/api/comms.js";
 import { ApiError } from "../../core/api/client.js";
@@ -38,6 +39,7 @@ export function UsersPage(): JSX.Element {
   const [permUser, setPermUser] = useState<AdminUser | null>(null);
   const [pwdUser, setPwdUser] = useState<AdminUser | null>(null);
   const [chanUser, setChanUser] = useState<AdminUser | null>(null);
+  const [editUser, setEditUser] = useState<AdminUser | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["iam", "users"] });
@@ -107,6 +109,9 @@ export function UsersPage(): JSX.Element {
                     <IconButton size="small" onClick={() => resend.mutate(u.id)}><ReplayIcon fontSize="small" /></IconButton>
                   </Tooltip>
                 )}
+                <Tooltip title="Editar nome e e-mail">
+                  <IconButton size="small" onClick={() => setEditUser(u)}><EditIcon fontSize="small" /></IconButton>
+                </Tooltip>
                 <Tooltip title="Canal de WhatsApp (Evolution API)">
                   <IconButton size="small" onClick={() => setChanUser(u)}><WhatsAppIcon fontSize="small" /></IconButton>
                 </Tooltip>
@@ -125,6 +130,7 @@ export function UsersPage(): JSX.Element {
       <InviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} onDone={invalidate} onError={setError} />
       {permUser && <PermissionsDialog user={permUser} onClose={() => setPermUser(null)} />}
       {pwdUser && <PasswordDialog user={pwdUser} onClose={() => setPwdUser(null)} onError={setError} />}
+      {editUser && <EditUserDialog user={editUser} onClose={() => setEditUser(null)} onDone={invalidate} onError={setError} />}
       {chanUser && <WhatsappChannelDialog user={chanUser} onClose={() => setChanUser(null)} onError={setError} />}
     </Box>
   );
@@ -278,6 +284,39 @@ function PasswordDialog({
       <DialogActions>
         <Button onClick={onClose}>Cancelar</Button>
         <Button variant="contained" onClick={submit} disabled={save.isPending}>Salvar</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+/** Diálogo para o admin editar o nome e o e-mail de um usuário. */
+function EditUserDialog({
+  user, onClose, onDone, onError,
+}: {
+  user: AdminUser; onClose: () => void; onDone: () => void; onError: (m: string) => void;
+}): JSX.Element {
+  const [name, setName] = useState(user.full_name);
+  const [email, setEmail] = useState(user.email);
+  const save = useMutation({
+    mutationFn: () => updateUser(user.id, { full_name: name.trim(), email: email.trim() }),
+    onSuccess: () => { onDone(); onClose(); },
+    onError: (e) => onError(e instanceof ApiError ? e.message : "Falha ao salvar o usuário."),
+  });
+
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="xs">
+      <DialogTitle>Editar usuário — {user.full_name}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          <TextField label="Nome" value={name} onChange={(e) => setName(e.target.value)} required />
+          <TextField label="E-mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancelar</Button>
+        <Button variant="contained" onClick={() => save.mutate()} disabled={save.isPending || name.trim() === ""}>
+          {save.isPending ? "Salvando…" : "Salvar"}
+        </Button>
       </DialogActions>
     </Dialog>
   );
