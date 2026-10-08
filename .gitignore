@@ -6,3 +6,7 @@ coverage/
 .env.*
 !.env.example
 .DS_Store
+
+# Metadados de orquestração de workflows (não fazem parte do app)
+.agents/
+.worktrees/
