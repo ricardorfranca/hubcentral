@@ -2,9 +2,10 @@ import { describe, it, expect, afterAll } from "vitest";
 import type { PoolClient } from "pg";
 import { withRollback, closeTestPool } from "../helpers/db.js";
 import {
-  createProject, updateProject, archiveProject, listProjectsForUser, getProject,
+  createProject, updateProject, archiveProject, unarchiveProject, listProjectsForUser, getProject,
   assertProjectAccess, assertNotArchived,
 } from "../../src/modules/projetos/project-service.js";
+import { listTasksByProject } from "../../src/modules/projetos/task-service.js";
 import { addMember, removeMember, listMembers, isParticipant } from "../../src/modules/projetos/member-service.js";
 
 /**
@@ -26,6 +27,17 @@ async function newUser(client: PoolClient): Promise<string> {
     [`proj${seq}-${Math.random().toString(36).slice(2)}@x.com`, `User ${seq}`],
   );
   return rows[0]!.id;
+}
+
+/**
+ * Cria um usuário e o promove a `role = 'superadmin'` (dentro da transação),
+ * espelhando o helper de `tests/iam/rbac.test.ts`. `newUser` cria um usuário com
+ * papel padrão (não-superadmin), por isso a promoção é explícita aqui.
+ */
+async function newSuperadmin(client: PoolClient): Promise<string> {
+  const userId = await newUser(client);
+  await client.query(`UPDATE core.users SET role = 'superadmin' WHERE id = $1`, [userId]);
+  return userId;
 }
 
 describe("Projetos", () => {
@@ -98,6 +110,100 @@ describe("Projetos", () => {
       expect(upd?.name).toBe("New");
       expect(upd?.owner_user_id).toBe(novoDono);
       expect((await listMembers(client, p.id)).some((m) => m.user_id === novoDono)).toBe(true);
+    });
+  });
+});
+
+describe("Acesso total de administradores (superadmin) a projetos", () => {
+  it("admin não-membro acessa o detalhe de projeto alheio (leitura)", async () => {
+    await withRollback(async (client) => {
+      const owner = await newUser(client);
+      const admin = await newSuperadmin(client);
+      const p = await createProject(client, { name: "Alheio" }, owner);
+
+      await expect(assertProjectAccess(client, admin, p.id)).resolves.toBeUndefined();
+      const view = await getProject(client, p.id, admin);
+      expect(view.id).toBe(p.id);
+      // Admin não é membro do projeto.
+      expect(view.members.some((m) => m.user_id === admin)).toBe(false);
+    });
+  });
+
+  it("admin não-membro escreve em projeto alheio (editar, arquivar, desarquivar)", async () => {
+    await withRollback(async (client) => {
+      const owner = await newUser(client);
+      const admin = await newSuperadmin(client);
+      const p = await createProject(client, { name: "Alheio" }, owner);
+
+      const upd = await updateProject(client, p.id, { name: "Editado pelo admin" }, admin);
+      expect(upd?.name).toBe("Editado pelo admin");
+
+      const archived = await archiveProject(client, p.id, admin);
+      expect(archived?.status).toBe("arquivado");
+
+      const reactivated = await unarchiveProject(client, p.id, admin);
+      expect(reactivated.status).toBe("ativo");
+    });
+  });
+
+  it("admin lista todos os projetos, inclusive os alheios", async () => {
+    await withRollback(async (client) => {
+      const owner = await newUser(client);
+      const admin = await newSuperadmin(client);
+      const p = await createProject(client, { name: "Alheio" }, owner);
+
+      expect((await listProjectsForUser(client, admin)).some((x) => x.id === p.id)).toBe(true);
+    });
+  });
+
+  it("admin vê tarefa não-visível de projeto alheio", async () => {
+    await withRollback(async (client) => {
+      const owner = await newUser(client);
+      const assignee = await newUser(client);
+      const admin = await newSuperadmin(client);
+      const p = await createProject(client, { name: "Alheio" }, owner);
+
+      // Tarefa restrita (visible_to_all = false) atribuída a um terceiro.
+      const { rows } = await client.query<{ id: string }>(
+        `INSERT INTO mod_projetos.tasks (project_id, title, visible_to_all, assignee_user_id)
+         VALUES ($1, 'Restrita', false, $2) RETURNING id`,
+        [p.id, assignee],
+      );
+      const taskId = rows[0]!.id;
+
+      const tasks = await listTasksByProject(client, p.id, admin);
+      expect(tasks.some((t) => t.id === taskId)).toBe(true);
+    });
+  });
+
+  it("preservação: não-admin não-membro continua bloqueado (lista e acesso)", async () => {
+    await withRollback(async (client) => {
+      const owner = await newUser(client);
+      const outro = await newUser(client);
+      const assignee = await newUser(client);
+      const p = await createProject(client, { name: "Privado" }, owner);
+
+      await expect(getProject(client, p.id, outro)).rejects.toMatchObject({ code: "PROJ_ACCESS_DENIED" });
+      await expect(assertProjectAccess(client, outro, p.id)).rejects.toMatchObject({ code: "PROJ_ACCESS_DENIED" });
+      expect((await listProjectsForUser(client, outro)).some((x) => x.id === p.id)).toBe(false);
+
+      // E tarefa não-visível permanece oculta para o não-admin não-participante.
+      await client.query(
+        `INSERT INTO mod_projetos.tasks (project_id, title, visible_to_all, assignee_user_id)
+         VALUES ($1, 'Restrita', false, $2)`,
+        [p.id, assignee],
+      );
+      const tasks = await listTasksByProject(client, p.id, outro);
+      expect(tasks.length).toBe(0);
+    });
+  });
+
+  it("assertProjectAccess lança PROJ_NOT_FOUND para admin em projeto inexistente", async () => {
+    await withRollback(async (client) => {
+      const admin = await newSuperadmin(client);
+      await expect(
+        assertProjectAccess(client, admin, "00000000-0000-0000-0000-000000000000"),
+      ).rejects.toMatchObject({ code: "PROJ_NOT_FOUND" });
     });
   });
 });

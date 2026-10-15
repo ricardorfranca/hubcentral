@@ -13,6 +13,7 @@ import { DomainError, ErrorCode } from "../../core/errors.js";
 import { log as auditLog } from "../../core/audit/audit-logger.js";
 import { publish, buildEnvelope } from "../../core/events/event-bus.js";
 import { assertNotArchived } from "./project-service.js";
+import { isSuperadmin } from "../../core/iam/rbac.js";
 
 /** Colunas fixas do Kanban. */
 export type TaskStatus = "nao_iniciada" | "em_execucao" | "finalizada";
@@ -243,6 +244,10 @@ export async function getTask(client: PoolClient, taskId: string): Promise<Task 
  * de minutos apontados por tarefa. Aplica a visibilidade: tarefas com
  * `visible_to_all = false` só aparecem para o dono do projeto e o responsável.
  *
+ * SuperAdministradores (`role = 'superadmin'`) têm acesso total e veem TODAS as
+ * tarefas do projeto, sem o predicado de visibilidade. Para não-superadmins o
+ * filtro de visibilidade é preservado.
+ *
  * @param client - Cliente PostgreSQL.
  * @param projectId - `id` do projeto.
  * @param viewerUserId - Usuário que está visualizando.
@@ -253,6 +258,17 @@ export async function listTasksByProject(
   projectId: string,
   viewerUserId: string,
 ): Promise<TaskWithTime[]> {
+  if (await isSuperadmin(client, viewerUserId)) {
+    const { rows } = await client.query<TaskWithTime>(
+      `SELECT ${COLUMNS.split(", ").map((c) => `t.${c}`).join(", ")},
+              COALESCE((SELECT SUM(minutes) FROM mod_projetos.task_comments tc WHERE tc.task_id = t.id), 0)::int AS minutes_total
+       FROM mod_projetos.tasks t
+       WHERE t.project_id = $1
+       ORDER BY t.status, t.position, t.created_at`,
+      [projectId],
+    );
+    return rows;
+  }
   const { rows } = await client.query<TaskWithTime>(
     `SELECT ${COLUMNS.split(", ").map((c) => `t.${c}`).join(", ")},
             COALESCE((SELECT SUM(minutes) FROM mod_projetos.task_comments tc WHERE tc.task_id = t.id), 0)::int AS minutes_total

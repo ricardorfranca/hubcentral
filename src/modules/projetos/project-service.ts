@@ -57,6 +57,13 @@ const COLUMNS =
 /**
  * Verifica se o usuário é dono ou membro do projeto; lança se não for.
  *
+ * SuperAdministradores (`role = 'superadmin'`) têm acesso total a todos os
+ * projetos, mesmo quando não são membros: uma vez confirmado que o projeto
+ * existe (preservando `PROJ_NOT_FOUND`), o acesso é autorizado sem checar
+ * dono/membro. Este é o ponto único de participação; o bypass fica centralizado
+ * aqui e vale tanto para leitura quanto para escrita. Para não-superadmins o
+ * comportamento é inalterado (membership continua valendo).
+ *
  * @param client - Cliente PostgreSQL.
  * @param userId - `user_id` autenticado.
  * @param projectId - `id` do projeto.
@@ -79,6 +86,8 @@ export async function assertProjectAccess(
   if (!project) {
     throw new DomainError(ErrorCode.PROJ_NOT_FOUND, "Projeto não encontrado.", { project_id: projectId });
   }
+  // Bypass de superadmin: acesso total a qualquer projeto (D2 do plano).
+  if (await isSuperadmin(client, userId)) return;
   if (project.owner_user_id === userId) return;
   const member = await client.query(
     `SELECT 1 FROM mod_projetos.project_members WHERE project_id = $1 AND user_id = $2`,
@@ -353,11 +362,21 @@ export async function getProjectTotals(client: PoolClient, id: string): Promise<
  * Lista os projetos em que o usuário é dono ou membro (fonte da regra de
  * acesso: não retorna projetos alheios).
  *
+ * SuperAdministradores (`role = 'superadmin'`) têm acesso total e recebem
+ * TODOS os projetos, independentemente de participação. Para não-superadmins o
+ * filtro de dono/membro é preservado.
+ *
  * @param client - Cliente PostgreSQL.
  * @param userId - `user_id` autenticado.
- * @returns Os projetos do usuário, mais recentes primeiro.
+ * @returns Os projetos do usuário (ou todos, para superadmin), mais recentes primeiro.
  */
 export async function listProjectsForUser(client: PoolClient, userId: string): Promise<Project[]> {
+  if (await isSuperadmin(client, userId)) {
+    const { rows } = await client.query<Project>(
+      `SELECT ${COLUMNS} FROM mod_projetos.projects ORDER BY updated_at DESC`,
+    );
+    return rows;
+  }
   const { rows } = await client.query<Project>(
     `SELECT ${COLUMNS.split(", ").map((c) => `p.${c}`).join(", ")}
      FROM mod_projetos.projects p
