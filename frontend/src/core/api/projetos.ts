@@ -24,6 +24,8 @@ export interface Project {
   due_date: string | null;
   hourly_rate: string;
   warn_days: number;
+  /** Tempo estimado/orçado do projeto, em minutos (editável; distinto do apontado). */
+  estimated_minutes: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -125,6 +127,7 @@ export function createProject(input: {
   due_date?: string | undefined;
   hourly_rate?: number | undefined;
   warn_days?: number | undefined;
+  estimated_minutes?: number | undefined;
 }): Promise<Project> {
   return request<Project>("/api/projetos", { method: "POST", body: input });
 }
@@ -138,6 +141,7 @@ export function updateProject(id: string, patch: {
   due_date?: string;
   hourly_rate?: number;
   warn_days?: number;
+  estimated_minutes?: number;
 }): Promise<Project> {
   return request<Project>(`/api/projetos/${id}`, { method: "PATCH", body: patch });
 }

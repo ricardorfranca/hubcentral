@@ -95,6 +95,26 @@ describe("Projetos — RBAC e acesso", () => {
     const outroList = await app.inject({ method: "GET", url: "/api/projetos", headers: auth(outro.token) });
     expect((outroList.json() as { id: string }[]).some((p) => p.id === projectId)).toBe(false);
   });
+
+  it("edita título, prazo e tempo estimado do projeto via PATCH", async () => {
+    const owner = await makeUser(true);
+
+    const created = await app.inject({ method: "POST", url: "/api/projetos", headers: auth(owner.token), payload: { name: "Antigo" } });
+    expect(created.statusCode).toBe(201);
+    const projectId = created.json().id;
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/api/projetos/${projectId}`,
+      headers: auth(owner.token),
+      payload: { name: "Novo título", due_date: "2030-12-31", estimated_minutes: 1200 },
+    });
+    expect(patched.statusCode).toBe(200);
+    const body = patched.json() as { name: string; due_date: string | null; estimated_minutes: number | null };
+    expect(body.name).toBe("Novo título");
+    expect(body.due_date).toBe("2030-12-31");
+    expect(body.estimated_minutes).toBe(1200);
+  });
 });
 
 describe("Projetos — tarefas, membros e anexos", () => {

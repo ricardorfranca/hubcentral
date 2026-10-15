@@ -14,6 +14,7 @@ import {
   ListItemText, IconButton, TextField, MenuItem, Divider, Tabs, Tab, ToggleButton, Tooltip,
 } from "@mui/material";
 import ArchiveIcon from "@mui/icons-material/Archive";
+import EditIcon from "@mui/icons-material/Edit";
 import UnarchiveIcon from "@mui/icons-material/Unarchive";
 import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -23,7 +24,7 @@ import CenterFocusWeakIcon from "@mui/icons-material/CenterFocusWeak";
 import { useQuery } from "@tanstack/react-query";
 import {
   useProject, useArchiveProject, useUnarchiveProject, useAddMember, useRemoveMember,
-  useAddProjectComment, useAddResource, useRemoveResource,
+  useAddProjectComment, useAddResource, useRemoveResource, useUpdateProject,
 } from "./hooks.js";
 import { useCan } from "../../core/rbac/can.js";
 import { listDirectoryUsers, downloadProjectReport } from "../../core/api/projetos.js";
@@ -52,7 +53,9 @@ export function ProjectDetailPage(): JSX.Element {
   const addComment = useAddProjectComment(id);
   const addResource = useAddResource(id);
   const removeResource = useRemoveResource(id);
+  const update = useUpdateProject(id);
 
+  const canEditProject = can("projetos:projeto:editar");
   const canManageMembers = can("projetos:membros:gerenciar");
   const directory = useQuery({ queryKey: ["projetos", "directory"], queryFn: listDirectoryUsers, enabled: canManageMembers });
 
@@ -62,6 +65,10 @@ export function ProjectDetailPage(): JSX.Element {
   const [resCost, setResCost] = useState("");
   const [tab, setTab] = useState(0);
   const [openTask, setOpenTask] = useState<string | null>(taskId ?? null);
+  // Edição inline do título (`name`): segue o padrão de toggle de edição do
+  // módulo (ex.: TaskDescription em TaskDetailDialog).
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
   // "Modo foco": oculta a coluna de informações e expande o quadro. Persistido
   // por projeto no localStorage.
   const [focus, setFocus] = useState<boolean>(() => {
@@ -103,7 +110,34 @@ export function ProjectDetailPage(): JSX.Element {
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
         <Box>
-          <Typography variant="h5">{project.name}</Typography>
+          {editingName ? (
+            <Stack direction="row" spacing={1} alignItems="center">
+              <TextField
+                size="small" autoFocus label="Título do projeto"
+                value={nameDraft} onChange={(e) => setNameDraft(e.target.value)}
+                sx={{ minWidth: 280 }}
+              />
+              <Button
+                size="small" variant="contained" disabled={!nameDraft.trim() || update.isPending}
+                onClick={() => { update.mutate({ name: nameDraft.trim() }); setEditingName(false); }}
+              >
+                Salvar
+              </Button>
+              <Button size="small" onClick={() => setEditingName(false)}>Cancelar</Button>
+            </Stack>
+          ) : (
+            <Stack direction="row" spacing={0.5} alignItems="center">
+              <Typography variant="h5">{project.name}</Typography>
+              {canEditProject && (
+                <IconButton
+                  size="small" aria-label="editar título"
+                  onClick={() => { setNameDraft(project.name); setEditingName(true); }}
+                >
+                  <EditIcon fontSize="small" />
+                </IconButton>
+              )}
+            </Stack>
+          )}
           {project.description && <Typography color="text.secondary">{project.description}</Typography>}
         </Box>
         <Stack direction="row" spacing={1} alignItems="center">
@@ -137,10 +171,42 @@ export function ProjectDetailPage(): JSX.Element {
         <Grid size={{ xs: 12, md: 4 }}>
           <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
             <Typography variant="h6" gutterBottom>Resumo</Typography>
-            <Stack spacing={0.5}>
-              <Typography variant="body2">Prazo: {project.due_date ? new Date(project.due_date).toLocaleDateString("pt-BR") : "—"}</Typography>
+            <Stack spacing={canEditProject ? 1.5 : 0.5}>
+              {canEditProject ? (
+                <>
+                  {/* Prazo (data de entrega) = campo `due_date`. É o "tempo/prazo"
+                      editável do projeto; segue o padrão de edição de data da tarefa. */}
+                  <TextField
+                    label="Prazo (data de entrega)" type="date" size="small" fullWidth
+                    value={project.due_date ? project.due_date.slice(0, 10) : ""}
+                    onChange={(e) => update.mutate({ due_date: e.target.value })}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                  {/* Tempo estimado: armazenado em MINUTOS no banco; exposto em HORAS
+                      na UI. Converte horas→minutos ao salvar (Math.round(horas*60)). */}
+                  <TextField
+                    label="Tempo estimado (horas)" type="number" size="small" fullWidth
+                    defaultValue={project.estimated_minutes != null ? project.estimated_minutes / 60 : ""}
+                    key={project.estimated_minutes ?? "null"}
+                    inputProps={{ min: 0, step: 0.5 }}
+                    onBlur={(e) => {
+                      const raw = e.target.value.trim();
+                      if (raw === "") return;
+                      const minutes = Math.round(Number(raw) * 60);
+                      if (!Number.isFinite(minutes) || minutes < 0) return;
+                      if (minutes !== (project.estimated_minutes ?? -1)) update.mutate({ estimated_minutes: minutes });
+                    }}
+                  />
+                </>
+              ) : (
+                <>
+                  <Typography variant="body2">Prazo: {project.due_date ? new Date(project.due_date).toLocaleDateString("pt-BR") : "—"}</Typography>
+                  <Typography variant="body2">Tempo estimado: {project.estimated_minutes != null ? fmtMinutes(project.estimated_minutes) : "—"}</Typography>
+                </>
+              )}
               <Typography variant="body2">Valor/hora: {brl(project.hourly_rate)}</Typography>
-              <Typography variant="body2">Tempo total: {fmtMinutes(project.totals.total_minutes)}</Typography>
+              {/* Tempo apontado (agregado de tarefas) — distinto do tempo estimado acima. */}
+              <Typography variant="body2">Tempo total (apontado): {fmtMinutes(project.totals.total_minutes)}</Typography>
               <Typography variant="body2">Custo mão de obra: {brl(project.totals.labor_cost)}</Typography>
               <Typography variant="body2">Custo recursos: {brl(project.totals.resource_cost)}</Typography>
               <Typography variant="subtitle2">Custo total: {brl(project.totals.total_cost)}</Typography>

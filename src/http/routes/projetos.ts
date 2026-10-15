@@ -72,14 +72,14 @@ export function registerProjetosRoutes(app: FastifyInstance, pool: Pool): void {
   });
 
   app.post<{
-    Body: { name: string; description?: string; detail?: string; owner_user_id?: string; due_date?: string; hourly_rate?: number; warn_days?: number };
+    Body: { name: string; description?: string; detail?: string; owner_user_id?: string; due_date?: string; hourly_rate?: number; warn_days?: number; estimated_minutes?: number };
   }>("/api/projetos", async (request, reply) => {
     const b = request.body;
     const project = await withTransaction(pool, async (c) => {
       await authorize(c, request.userId, "projetos:projeto:criar");
       return createProject(c, {
         name: b.name, description: b.description, detail: b.detail, ownerUserId: b.owner_user_id,
-        dueDate: b.due_date, hourlyRate: b.hourly_rate, warnDays: b.warn_days,
+        dueDate: b.due_date, hourlyRate: b.hourly_rate, warnDays: b.warn_days, estimatedMinutes: b.estimated_minutes,
       }, request.userId);
     });
     return reply.status(201).send(project);
@@ -95,7 +95,7 @@ export function registerProjetosRoutes(app: FastifyInstance, pool: Pool): void {
 
   app.patch<{
     Params: { id: string };
-    Body: { name?: string; description?: string; detail?: string; owner_user_id?: string; due_date?: string; hourly_rate?: number; warn_days?: number };
+    Body: { name?: string; description?: string; detail?: string; owner_user_id?: string; due_date?: string; hourly_rate?: number; warn_days?: number; estimated_minutes?: number };
   }>("/api/projetos/:id", async (request, reply) => {
     const b = request.body;
     const project = await withTransaction(pool, async (c) => {
@@ -109,6 +109,7 @@ export function registerProjetosRoutes(app: FastifyInstance, pool: Pool): void {
       if (b.due_date !== undefined) patch.dueDate = b.due_date;
       if (b.hourly_rate !== undefined) patch.hourlyRate = b.hourly_rate;
       if (b.warn_days !== undefined) patch.warnDays = b.warn_days;
+      if (b.estimated_minutes !== undefined) patch.estimatedMinutes = b.estimated_minutes;
       return updateProject(c, request.params.id, patch, request.userId);
     });
     return reply.send(project);

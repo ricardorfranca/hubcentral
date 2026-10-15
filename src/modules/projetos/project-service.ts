@@ -27,6 +27,8 @@ export interface Project {
   due_date: string | null;
   hourly_rate: string;
   warn_days: number;
+  /** Tempo estimado/orçado do projeto, em minutos (editável; distinto do apontado). */
+  estimated_minutes: number | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -52,7 +54,7 @@ export interface ProjectView extends Project {
 }
 
 const COLUMNS =
-  "id, name, description, detail, owner_user_id, status, due_date, hourly_rate, warn_days, created_at, updated_at";
+  "id, name, description, detail, owner_user_id, status, due_date, hourly_rate, warn_days, estimated_minutes, created_at, updated_at";
 
 /**
  * Verifica se o usuário é dono ou membro do projeto; lança se não for.
@@ -160,6 +162,8 @@ export async function createProject(
     dueDate?: string | undefined;
     hourlyRate?: number | undefined;
     warnDays?: number | undefined;
+    /** Tempo estimado/orçado em minutos (nullable). */
+    estimatedMinutes?: number | undefined;
   },
   actorUserId: string | null = null,
 ): Promise<Project> {
@@ -168,12 +172,12 @@ export async function createProject(
     throw new DomainError(ErrorCode.AUTH_UNAUTHORIZED, "Dono do projeto não informado.", {});
   }
   const { rows } = await client.query<Project>(
-    `INSERT INTO mod_projetos.projects (name, description, detail, owner_user_id, created_by, due_date, hourly_rate, warn_days)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 2))
+    `INSERT INTO mod_projetos.projects (name, description, detail, owner_user_id, created_by, due_date, hourly_rate, warn_days, estimated_minutes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 2), $9)
      RETURNING ${COLUMNS}`,
     [
       input.name, input.description ?? null, input.detail ?? null, ownerId, actorUserId,
-      input.dueDate ?? null, input.hourlyRate ?? 0, input.warnDays ?? null,
+      input.dueDate ?? null, input.hourlyRate ?? 0, input.warnDays ?? null, input.estimatedMinutes ?? null,
     ],
   );
   const project = rows[0] as Project;
@@ -195,7 +199,9 @@ export async function createProject(
 }
 
 /**
- * Edita nome, descrição, descritivo principal e/ou dono de um projeto. Audita.
+ * Edita nome, descrição, descritivo principal, dono, prazo (`due_date`),
+ * valor/hora, dias de alerta e/ou tempo estimado (`estimated_minutes`) de um
+ * projeto. Audita.
  *
  * @param client - Cliente PostgreSQL.
  * @param id - `id` do projeto.
@@ -214,6 +220,8 @@ export async function updateProject(
     dueDate?: string | null;
     hourlyRate?: number;
     warnDays?: number;
+    /** Tempo estimado/orçado em minutos. COALESCE: null = não altera (padrão do módulo). */
+    estimatedMinutes?: number | null;
   },
   actorUserId: string | null = null,
 ): Promise<Project | null> {
@@ -226,11 +234,12 @@ export async function updateProject(
        due_date = COALESCE($6, due_date),
        hourly_rate = COALESCE($7, hourly_rate),
        warn_days = COALESCE($8, warn_days),
+       estimated_minutes = COALESCE($9, estimated_minutes),
        updated_at = now()
      WHERE id = $1 RETURNING ${COLUMNS}`,
     [
       id, patch.name ?? null, patch.description ?? null, patch.detail ?? null, patch.ownerUserId ?? null,
-      patch.dueDate ?? null, patch.hourlyRate ?? null, patch.warnDays ?? null,
+      patch.dueDate ?? null, patch.hourlyRate ?? null, patch.warnDays ?? null, patch.estimatedMinutes ?? null,
     ],
   );
   const project = rows[0] ?? null;

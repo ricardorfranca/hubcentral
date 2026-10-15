@@ -11,7 +11,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Box, Typography, Stack, Button, Table, TableBody, TableCell, TableHead, TableRow,
   Paper, TableContainer, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, Alert, Chip,
+  TextField, Alert, Chip, FormControlLabel, Checkbox,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import { useProjects, useCreateProject } from "./hooks.js";
@@ -28,10 +28,26 @@ export function ProjectsPage(): JSX.Element {
   const can = useCan();
   const { data: projects, isLoading } = useProjects();
   const [dialogOpen, setDialogOpen] = useState(false);
+  // Busca por texto (nome/descrição) e filtro de status. Por padrão só exibe
+  // projetos em andamento (ativos), ocultando os arquivados; o usuário pode
+  // optar por mostrar os arquivados.
+  const [search, setSearch] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
 
   if (isLoading) {
     return <Box sx={{ display: "grid", placeItems: "center", height: 200 }}><CircularProgress /></Box>;
   }
+
+  const q = search.trim().toLowerCase();
+  const visibleProjects = (projects ?? []).filter((p) => {
+    // Filtro padrão: apenas ativos, a menos que o usuário peça os arquivados.
+    if (!showArchived && p.status !== "ativo") return false;
+    if (q === "") return true;
+    return (
+      p.name.toLowerCase().includes(q) ||
+      (p.description ?? "").toLowerCase().includes(q)
+    );
+  });
 
   return (
     <Box>
@@ -44,6 +60,17 @@ export function ProjectsPage(): JSX.Element {
         )}
       </Stack>
 
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "center" }} sx={{ mb: 2 }}>
+        <TextField
+          size="small" label="Buscar projetos" placeholder="Nome ou descrição…"
+          value={search} onChange={(e) => setSearch(e.target.value)} sx={{ minWidth: 260 }}
+        />
+        <FormControlLabel
+          control={<Checkbox checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />}
+          label="Mostrar arquivados"
+        />
+      </Stack>
+
       <TableContainer component={Paper} variant="outlined">
         <Table>
           <TableHead>
@@ -54,7 +81,7 @@ export function ProjectsPage(): JSX.Element {
             </TableRow>
           </TableHead>
           <TableBody>
-            {(projects ?? []).map((p) => (
+            {visibleProjects.map((p) => (
               <TableRow key={p.id} hover sx={{ cursor: "pointer" }} onClick={() => navigate(`/projetos/${p.id}`)}>
                 <TableCell>{p.name}</TableCell>
                 <TableCell>{p.description ?? "—"}</TableCell>
@@ -63,8 +90,8 @@ export function ProjectsPage(): JSX.Element {
                 </TableCell>
               </TableRow>
             ))}
-            {(projects ?? []).length === 0 && (
-              <TableRow><TableCell colSpan={3}><Typography color="text.secondary">Nenhum projeto. Crie o primeiro.</Typography></TableCell></TableRow>
+            {visibleProjects.length === 0 && (
+              <TableRow><TableCell colSpan={3}><Typography color="text.secondary">Nenhum projeto encontrado.</Typography></TableCell></TableRow>
             )}
           </TableBody>
         </Table>
