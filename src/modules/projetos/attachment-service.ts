@@ -89,6 +89,11 @@ export async function saveAttachment(
   input: { taskId: string; projectId: string; originalName: string; mimeType?: string | undefined; content: Buffer },
   actorUserId: string | null = null,
 ): Promise<Attachment> {
+  // Defesa em profundidade (independente da rota): nunca persistir conteúdo
+  // vazio, que resultaria em arquivo de 0 KB e metadados inconsistentes.
+  if (input.content.byteLength === 0) {
+    throw new DomainError(ErrorCode.PROJ_ATTACHMENT_INVALID, "Arquivo vazio.", {});
+  }
   await validateAttachment(client, input.originalName, input.content.byteLength);
 
   const ext = safeExtension(input.originalName);

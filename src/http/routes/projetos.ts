@@ -345,7 +345,31 @@ export function registerProjetosRoutes(app: FastifyInstance, pool: Pool): void {
     if (!file) {
       return reply.status(400).send({ code: "PROJ_ATTACHMENT_INVALID", message: "Nenhum arquivo enviado.", details: {} });
     }
-    const content = await file.toBuffer();
+    // O @fastify/multipart trunca o stream ao atingir o limite de tamanho. Com
+    // o padrão `throwFileSizeLimit: true`, `toBuffer()` lança FST_REQ_FILE_TOO_LARGE;
+    // o flag de truncamento também fica no stream Busboy subjacente
+    // (`file.file.truncated`). Em ambos os casos rejeitamos para não persistir
+    // anexo parcial/zerado (que apareceria como 0 KB e não abriria no download).
+    let content: Buffer;
+    try {
+      content = await file.toBuffer();
+    } catch (err) {
+      if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
+        return reply.status(400).send({
+          code: "PROJ_ATTACHMENT_INVALID",
+          message: "Arquivo excede o tamanho máximo permitido ou foi truncado durante o envio.",
+          details: {},
+        });
+      }
+      throw err;
+    }
+    if (file.file.truncated) {
+      return reply.status(400).send({
+        code: "PROJ_ATTACHMENT_INVALID",
+        message: "Arquivo excede o tamanho máximo permitido ou foi truncado durante o envio.",
+        details: {},
+      });
+    }
     const attachment = await withTransaction(pool, async (c) => {
       await authorize(c, request.userId, "projetos:anexo:enviar");
       const task = await getTask(c, request.params.taskId);

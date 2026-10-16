@@ -144,9 +144,23 @@ describe("Projetos — tarefas, membros e anexos", () => {
     expect(comment.statusCode).toBe(201);
 
     // Upload de anexo válido (txt).
-    const upload = await uploadFile(taskId, membro.token, "nota.txt", "text/plain", Buffer.from("conteudo"));
+    const conteudo = Buffer.from("conteudo");
+    const upload = await uploadFile(taskId, membro.token, "nota.txt", "text/plain", conteudo);
     expect(upload.statusCode).toBe(201);
-    const attId = upload.json().id;
+    const attBody = upload.json() as { id: string; stored_name: string; size_bytes: number | string };
+    const attId = attBody.id;
+
+    // size_bytes deve refletir exatamente os bytes enviados (> 0). A coluna é
+    // BIGINT, serializada como string pelo driver pg; normalizamos para Number.
+    const sizeBytes = Number(attBody.size_bytes);
+    expect(sizeBytes).toBe(conteudo.byteLength);
+    expect(sizeBytes).toBeGreaterThan(0);
+
+    // O arquivo gravado em disco contém exatamente os bytes enviados.
+    const onDisk = await fs.readFile(
+      path.join(uploadsDir, "projetos", projectId, taskId, attBody.stored_name),
+    );
+    expect(onDisk.equals(conteudo)).toBe(true);
 
     // Download retorna o conteúdo original.
     const download = await app.inject({ method: "GET", url: `/api/projetos/attachments/${attId}`, headers: auth(membro.token) });
@@ -161,6 +175,45 @@ describe("Projetos — tarefas, membros e anexos", () => {
     // Exclui o anexo válido.
     const del = await app.inject({ method: "DELETE", url: `/api/projetos/attachments/${attId}`, headers: auth(membro.token) });
     expect(del.statusCode).toBe(204);
+  });
+
+  it("rejeita upload truncado/que excede o limite com 400 PROJ_ATTACHMENT_INVALID e sem persistir", async () => {
+    const owner = await makeUser(true);
+    const created = await app.inject({ method: "POST", url: "/api/projetos", headers: auth(owner.token), payload: { name: "Lim" } });
+    const projectId = created.json().id;
+    const task = await app.inject({ method: "POST", url: `/api/projetos/${projectId}/tasks`, headers: auth(owner.token), payload: { title: "T" } });
+    const taskId = task.json().id;
+
+    // Constrói um app com limite de upload minúsculo para forçar o truncamento
+    // do @fastify/multipart; o pool é compartilhado, então a tarefa já existe.
+    const prevMax = process.env.UPLOADS_MAX_BYTES;
+    process.env.UPLOADS_MAX_BYTES = "16";
+    const smallApp = buildApp(getTestPool());
+    await smallApp.ready();
+    try {
+      // Payload acima do limite de 16 bytes: o stream é truncado no envio.
+      const boundary = "----vitestboundary" + Math.random().toString(36).slice(2);
+      const head = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="grande.txt"\r\nContent-Type: text/plain\r\n\r\n`;
+      const tail = `\r\n--${boundary}--\r\n`;
+      const big = Buffer.alloc(1024, 0x61);
+      const payload = Buffer.concat([Buffer.from(head), big, Buffer.from(tail)]);
+      const res = await smallApp.inject({
+        method: "POST",
+        url: `/api/projetos/tasks/${taskId}/attachments`,
+        headers: { ...auth(owner.token), "content-type": `multipart/form-data; boundary=${boundary}` },
+        payload,
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().code).toBe("PROJ_ATTACHMENT_INVALID");
+
+      // Nenhum metadado foi persistido para a tarefa.
+      const list = await app.inject({ method: "GET", url: `/api/projetos/tasks/${taskId}`, headers: auth(owner.token) });
+      expect((list.json().attachments as unknown[]).length).toBe(0);
+    } finally {
+      await smallApp.close();
+      if (prevMax === undefined) delete process.env.UPLOADS_MAX_BYTES;
+      else process.env.UPLOADS_MAX_BYTES = prevMax;
+    }
   });
 });
 
