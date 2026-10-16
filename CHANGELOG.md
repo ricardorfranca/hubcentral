@@ -2,6 +2,17 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.15.0] - 2026-10-15
+
+### Adicionado
+
+- **Editar o projeto pela tela de detalhe.** No detalhe do projeto agora é possível editar diretamente o **título** (ícone de lápis ao lado do nome, com Salvar/Cancelar) e, no bloco "Resumo", o **prazo (data de entrega)** e o **tempo estimado (em horas)** do projeto. A edição respeita a permissão `projetos:projeto:editar`; sem ela, os valores aparecem apenas como texto. O tempo estimado é armazenado em minutos no banco e exibido/editado em horas na interface. O "Tempo total (apontado)" continua somente-leitura, somado a partir dos apontamentos das tarefas.
+- **Busca e filtro na lista de projetos.** A tela inicial de Projetos ganhou um campo de busca (por nome e descrição, sem diferenciar maiúsculas/minúsculas) e passa a mostrar por padrão apenas os projetos **em andamento (ativos)**, ocultando os arquivados. Um controle "Mostrar arquivados" permite exibi-los quando necessário.
+
+### Operação
+
+- **Nova migração de banco: execute `npm run migrate:up`.** Adiciona a coluna `estimated_minutes` (inteiro, nulo permitido) à tabela de projetos para armazenar o tempo estimado/orçado do projeto. Preserva os dados existentes.
+
 ## [0.14.0] - 2026-10-07
 
 ### Adicionado
