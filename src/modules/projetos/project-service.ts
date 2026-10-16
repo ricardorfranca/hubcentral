@@ -53,8 +53,14 @@ export interface ProjectView extends Project {
   totals: ProjectTotals;
 }
 
+// `due_date` é projetado como texto (`::text AS due_date`) para que a API sempre
+// serialize a data como "YYYY-MM-DD". Sem isso, o driver `pg` (sem setTypeParser
+// no pool) devolve DATE como objeto Date, que o Fastify serializa para ISO
+// completo com timezone (ex.: "2030-12-31T00:00:00.000Z"). Projetar como texto
+// mantém o contrato estável para o frontend (que usa `due_date.slice(0,10)`) e
+// para os testes de API.
 const COLUMNS =
-  "id, name, description, detail, owner_user_id, status, due_date, hourly_rate, warn_days, estimated_minutes, created_at, updated_at";
+  "id, name, description, detail, owner_user_id, status, due_date::text AS due_date, hourly_rate, warn_days, estimated_minutes, created_at, updated_at";
 
 /**
  * Verifica se o usuário é dono ou membro do projeto; lança se não for.
@@ -225,6 +231,16 @@ export async function updateProject(
   },
   actorUserId: string | null = null,
 ): Promise<Project | null> {
+  // Rejeita título vazio: a UI já bloqueia o Salvar, mas um PATCH direto com
+  // `name: ""` escaparia o COALESCE abaixo (string vazia não é null) e gravaria
+  // um título em branco. Validamos aqui para fechar essa lacuna no servidor.
+  if (patch.name !== undefined && patch.name.trim() === "") {
+    throw new DomainError(ErrorCode.PROJ_INVALID_NAME, "O título do projeto não pode ficar vazio.", {});
+  }
+  // Nota (intencional): `estimated_minutes` usa COALESCE, então um PATCH com
+  // valor null/ausente NÃO altera o estimado — não há caminho para zerá-lo de
+  // volta a null. Isso é coerente com o padrão COALESCE dos demais campos do
+  // módulo; "remover a estimativa" não é um caso de uso suportado hoje.
   const { rows } = await client.query<Project>(
     `UPDATE mod_projetos.projects SET
        name = COALESCE($2, name),

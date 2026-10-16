@@ -183,6 +183,8 @@ export const ErrorCode = {
   PROJ_ACCESS_DENIED: "PROJ_ACCESS_DENIED",
   /** Projeto não encontrado. */
   PROJ_NOT_FOUND: "PROJ_NOT_FOUND",
+  /** Título (name) do projeto vazio/em branco. */
+  PROJ_INVALID_NAME: "PROJ_INVALID_NAME",
   /** Tarefa não encontrada. */
   PROJ_TASK_NOT_FOUND: "PROJ_TASK_NOT_FOUND",
   /** Operação bloqueada porque o projeto está arquivado. */
