@@ -267,9 +267,30 @@ export async function uploadAttachment(taskId: string, file: File): Promise<Atta
   return res.json() as Promise<Attachment>;
 }
 
-/** URL de download de um anexo. */
-export function attachmentUrl(attachmentId: string): string {
-  return `/api/projetos/attachments/${attachmentId}`;
+/**
+ * Baixa um anexo de tarefa com o header Authorization Bearer e dispara o
+ * download no navegador. A rota exige token, então uma navegação simples por
+ * href falharia (401); por isso usamos fetch + blob + object URL, espelhando
+ * downloadProjectReport().
+ */
+export async function downloadAttachment(att: { id: string; original_name: string; mime_type: string | null }): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`/api/projetos/attachments/${att.id}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ message: "Falha ao baixar anexo." }));
+    throw new Error(body.message ?? "Falha ao baixar anexo.");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = att.original_name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 /** Exclui um anexo. */

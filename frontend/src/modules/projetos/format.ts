@@ -14,6 +14,19 @@ export function fmtMinutes(min: number | undefined): string {
   return `${h}h ${m % 60}min`;
 }
 
+/**
+ * Formata um tamanho em bytes de forma legível (B/KB/MB), evitando que
+ * arquivos pequenos apareçam como "0.00 MB". Aceita número ou string (o driver
+ * pg serializa BIGINT como string).
+ */
+export function fmtBytes(bytes: number | string | null | undefined): string {
+  const n = typeof bytes === "string" ? Number(bytes) : bytes ?? 0;
+  const value = Number.isFinite(n) ? (n as number) : 0;
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+}
+
 /** Formata um valor (número ou string) como moeda BRL. */
 export function brl(value: number | string | null | undefined): string {
   const n = typeof value === "string" ? Number(value) : value ?? 0;

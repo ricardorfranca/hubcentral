@@ -10,7 +10,7 @@
 import { useState } from "react";
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, Stack, Typography, Divider,
-  List, ListItem, ListItemText, IconButton, TextField, MenuItem, CircularProgress, Link,
+  List, ListItem, ListItemText, IconButton, TextField, MenuItem, CircularProgress,
   FormControlLabel, Switch, Chip, Box,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
@@ -20,8 +20,8 @@ import {
   useTask, useAddTaskComment, useSetAssignee, useUpdateTask, useUploadAttachment, useDeleteAttachment, useTasks,
 } from "./hooks.js";
 import { useCan } from "../../core/rbac/can.js";
-import { attachmentUrl, type ProjectMember } from "../../core/api/projetos.js";
-import { fmtMinutes } from "./format.js";
+import { downloadAttachment, type ProjectMember } from "../../core/api/projetos.js";
+import { fmtBytes, fmtMinutes } from "./format.js";
 import { CustomFieldsEditor } from "../../core/ui/CustomFieldsEditor.js";
 
 /** Props do diálogo. */
@@ -146,7 +146,7 @@ export function TaskDetailDialog({ taskId, projectId, members, onClose }: Props)
                     key={a.id}
                     secondaryAction={
                       <Stack direction="row" spacing={0.5}>
-                        <IconButton component={Link} href={attachmentUrl(a.id)} size="small" aria-label="baixar">
+                        <IconButton size="small" aria-label="baixar" onClick={() => { void downloadAttachment(a); }}>
                           <DownloadIcon fontSize="small" />
                         </IconButton>
                         {canDeleteAtt && (
@@ -157,7 +157,7 @@ export function TaskDetailDialog({ taskId, projectId, members, onClose }: Props)
                       </Stack>
                     }
                   >
-                    <ListItemText primary={a.original_name} secondary={`${(a.size_bytes / (1024 * 1024)).toFixed(2)} MB`} />
+                    <ListItemText primary={a.original_name} secondary={fmtBytes(a.size_bytes)} />
                   </ListItem>
                 ))}
                 {task.attachments.length === 0 && <Typography variant="caption" color="text.secondary">Sem anexos.</Typography>}
