@@ -22,6 +22,17 @@ describe("hasPermission", () => {
     expect(hasPermission(["crm:pipeline:mover"], "crm:pipeline:mover")).toBe(true);
     expect(hasPermission(["crm:pipeline:visualizar"], "crm:pipeline:mover")).toBe(false);
   });
+
+  it("libera a edição de projeto a quem tem projetos:projeto:editar (membro)", () => {
+    // Gate consumido por ProjectDetailPage para exibir/habilitar a edição de
+    // título e tempo estimado. O membro com o namespace vê os controles.
+    expect(hasPermission(["projetos:projeto:editar"], "projetos:projeto:editar")).toBe(true);
+  });
+
+  it("não libera a edição de projeto a quem só pode visualizar", () => {
+    // Participante sem o namespace de edição não deve ver/habilitar os controles.
+    expect(hasPermission(["projetos:projeto:visualizar"], "projetos:projeto:editar")).toBe(false);
+  });
 });
 
 describe("isSuperadmin", () => {

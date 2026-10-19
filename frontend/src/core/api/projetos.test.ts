@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import { downloadAttachment } from "./projetos.js";
+import { downloadAttachment, updateProject } from "./projetos.js";
 import { useSessionStore } from "../auth/session-store.js";
 
 /**
@@ -7,7 +7,8 @@ import { useSessionStore } from "../auth/session-store.js";
  *
  * Testes do cliente de Projetos: o download de anexo precisa enviar o header
  * Authorization Bearer (a rota exige token; uma navegação por href sem token
- * falharia com 401).
+ * falharia com 401); e a edição de projeto (`updateProject`) precisa enviar o
+ * PATCH com título e tempo estimado.
  */
 
 describe("downloadAttachment", () => {
@@ -37,5 +38,36 @@ describe("downloadAttachment", () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/projetos/attachments/att-1");
     expect((init.headers as Record<string, string>)["Authorization"]).toBe("Bearer tok-123");
+  });
+});
+
+describe("updateProject", () => {
+  beforeEach(() => {
+    useSessionStore.getState().clear();
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("faz PATCH do título e do tempo estimado com Authorization Bearer", async () => {
+    useSessionStore.getState().setSession("tok-123", { id: "u1", email: "a@b.com", role: "operator", password_set: true }, []);
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "p1", name: "Novo", estimated_minutes: 1200 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await updateProject("p1", { name: "Novo", estimated_minutes: 1200 });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("/api/projetos/p1");
+    expect(init.method).toBe("PATCH");
+    expect((init.headers as Record<string, string>)["Authorization"]).toBe("Bearer tok-123");
+    expect(JSON.parse(init.body as string)).toEqual({ name: "Novo", estimated_minutes: 1200 });
   });
 });

@@ -2,6 +2,16 @@
 
 Todas as mudanças relevantes deste projeto são documentadas aqui. O formato segue o versionamento semântico (SemVer).
 
+## [0.15.1] - 2026-10-19
+
+### Corrigido
+
+- **Membros do projeto voltam a conseguir editar título e tempo estimado.** A edição do projeto (título e tempo estimado, no detalhe) exige a permissão `projetos:projeto:editar`, mas os usuários convidados nasciam sem nenhuma permissão e nunca a recebiam — na prática, só o SuperAdministrador conseguia editar. Agora, todo usuário recebe um **baseline de participante de Projetos** (incluindo `projetos:projeto:editar`) ao ser provisionado, e os controles de edição ficam disponíveis para o dono e os membros do projeto. A verificação de participação continua valendo: quem não participa do projeto permanece bloqueado, mesmo tendo a permissão.
+
+### Operação
+
+- **Nova migração de banco: execute `npm run migrate:up`.** Concede o baseline de permissões de Projetos (visualizar/criar/editar/arquivar projeto, tarefas, comentários, anexos e notificações) aos usuários **não-superadministradores já existentes**, para que membros atuais passem a editar título e tempo estimado dos projetos de que participam. Idempotente; não altera superadministradores nem usuários excluídos. A gestão de membros (`projetos:membros:gerenciar`) não faz parte do baseline.
+
 ## [0.15.0] - 2026-10-15
 
 ### Adicionado

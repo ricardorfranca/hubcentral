@@ -10,6 +10,8 @@
 import type { PoolClient } from "pg";
 import { DomainError, ErrorCode } from "../errors.js";
 import { hashPassword, verifyPassword, isValidPassword } from "./password.js";
+import { grantNamespace } from "./rbac.js";
+import { PROJETOS_PARTICIPANT_NAMESPACES } from "./namespaces.js";
 import { log as auditLog } from "../audit/audit-logger.js";
 
 /** Senha temporária padrão de convite (§5.6 do CRM). */
@@ -466,6 +468,14 @@ export async function inviteUser(
     [input.email, input.full_name, input.role, hashPassword(TEMP_PASSWORD)],
   );
   const user = rows[0] as IamUser;
+
+  // Baseline de participante de Projetos: novos usuários nascem aptos a operar
+  // um projeto do qual participem (incl. editar título e tempo estimado). A
+  // participação segue verificada por `assertProjectAccess` em runtime, então
+  // este baseline não autoriza acesso a projetos alheios. Idempotente.
+  for (const ns of PROJETOS_PARTICIPANT_NAMESPACES) {
+    await grantNamespace(client, user.id, ns);
+  }
 
   await auditLog(client, {
     userId: actorUserId,

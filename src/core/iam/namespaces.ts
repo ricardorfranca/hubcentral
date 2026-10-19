@@ -90,6 +90,38 @@ export const PROJETOS_NAMESPACES: readonly string[] = [
 ];
 
 /**
+ * Baseline de PARTICIPANTE do Módulo de Projetos: os namespaces que um usuário
+ * precisa para operar um projeto do qual participa (dono ou membro), incluindo
+ * `projetos:projeto:editar` (editar título e tempo estimado).
+ *
+ * É um subconjunto de {@link PROJETOS_NAMESPACES}. Fica de fora
+ * `projetos:membros:gerenciar`: gerir membros é uma ação mais privilegiada e
+ * concedê-la a todo participante afrouxaria o acesso além do necessário. A
+ * participação no projeto continua sendo verificada em runtime por
+ * `assertProjectAccess` (dono OU membro OU superadmin), de modo que ter este
+ * baseline NÃO autoriza um não-participante a editar um projeto alheio.
+ *
+ * Usado pelo provisionamento de novos usuários (`inviteUser`) e espelhado pela
+ * migration que concede o baseline aos usuários já existentes.
+ */
+export const PROJETOS_PARTICIPANT_NAMESPACES: readonly string[] = [
+  "projetos:projeto:visualizar",
+  "projetos:projeto:criar",
+  "projetos:projeto:editar",
+  "projetos:projeto:arquivar",
+  "projetos:tarefa:visualizar",
+  "projetos:tarefa:criar",
+  "projetos:tarefa:editar",
+  "projetos:tarefa:mover",
+  "projetos:tarefa:atribuir",
+  "projetos:comentario:criar",
+  "projetos:anexo:enviar",
+  "projetos:anexo:baixar",
+  "projetos:anexo:excluir",
+  "projetos:notificacoes:visualizar",
+];
+
+/**
  * Namespaces da API externa. São as capacidades que podem ser concedidas a uma
  * CHAVE de API (integrações), não a usuários da interface. Ficam catalogados
  * aqui para aparecerem no editor de permissões de chaves de API.

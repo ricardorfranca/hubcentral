@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { getTestPool, closeTestPool } from "../helpers/db.js";
 import { buildApp } from "../../src/http/app.js";
-import { setPassword } from "../../src/core/iam/identity-service.js";
+import { setPassword, inviteUser } from "../../src/core/iam/identity-service.js";
 import { grantNamespace } from "../../src/core/iam/rbac.js";
 import { PROJETOS_NAMESPACES } from "../../src/core/iam/namespaces.js";
 
@@ -46,6 +46,19 @@ async function makeUser(withProjNs: boolean): Promise<{ id: string; token: strin
   }
   const res = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email, password: "senha123" } });
   return { id, token: res.json().token };
+}
+
+/**
+ * Cria um usuário pelo caminho REAL de provisionamento (`inviteUser`), de modo
+ * que ele receba o baseline de participante de projetos sem nenhum grant manual
+ * — exercitando o cenário do membro comum (não-superadmin) que o usuário relatou.
+ */
+async function makeInvitedUser(): Promise<{ id: string; token: string }> {
+  const email = `pj-inv-${Math.random().toString(36).slice(2)}@x.com`;
+  const user = await withClient((c) => inviteUser(c, { email, full_name: "Membro", role: "operator" }));
+  await withClient((c) => setPassword(c, user.id, "senha123"));
+  const res = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email, password: "senha123" } });
+  return { id: user.id, token: res.json().token };
 }
 
 function auth(token: string): Record<string, string> {
@@ -114,6 +127,51 @@ describe("Projetos — RBAC e acesso", () => {
     expect(body.name).toBe("Novo título");
     expect(body.due_date).toBe("2030-12-31");
     expect(body.estimated_minutes).toBe(1200);
+  });
+
+  it("membro comum (não-superadmin) edita título e tempo estimado do projeto", async () => {
+    // Dono cria o projeto e adiciona um membro provisionado via inviteUser
+    // (que recebe o baseline de participante, sem grant manual).
+    const owner = await makeUser(true);
+    const membro = await makeInvitedUser();
+
+    const created = await app.inject({ method: "POST", url: "/api/projetos", headers: auth(owner.token), payload: { name: "Antigo" } });
+    expect(created.statusCode).toBe(201);
+    const projectId = created.json().id;
+
+    const addMember = await app.inject({ method: "POST", url: `/api/projetos/${projectId}/members`, headers: auth(owner.token), payload: { user_id: membro.id } });
+    expect(addMember.statusCode).toBe(204);
+
+    // O membro edita título e estimated_minutes — deve ser autorizado (200).
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/api/projetos/${projectId}`,
+      headers: auth(membro.token),
+      payload: { name: "Novo título", estimated_minutes: 1200 },
+    });
+    expect(patched.statusCode).toBe(200);
+    const body = patched.json() as { name: string; estimated_minutes: number | null };
+    expect(body.name).toBe("Novo título");
+    expect(body.estimated_minutes).toBe(1200);
+  });
+
+  it("não-participante (com o baseline) NÃO consegue editar projeto alheio (403)", async () => {
+    // Ambos têm o baseline de participante; o segundo NÃO é membro do projeto.
+    const owner = await makeUser(true);
+    const estranho = await makeInvitedUser();
+
+    const created = await app.inject({ method: "POST", url: "/api/projetos", headers: auth(owner.token), payload: { name: "Privado" } });
+    const projectId = created.json().id;
+
+    // Ter o namespace de edição não basta: assertProjectAccess barra o estranho.
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/api/projetos/${projectId}`,
+      headers: auth(estranho.token),
+      payload: { name: "Invasão", estimated_minutes: 999 },
+    });
+    expect(patched.statusCode).toBe(403);
+    expect(patched.json().code).toBe("PROJ_ACCESS_DENIED");
   });
 });
 
